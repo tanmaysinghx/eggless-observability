@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  eggless-server:
+    build:
+      context: ./eggless-server
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - EGGLESS_ENV=production
+    restart: always
+
+  eggless-client:
+    build:
+      context: ./eggless-client
+      dockerfile: Dockerfile
+    ports:
+      - "4200:80"
+    depends_on:
+      - eggless-server
+    restart: always
