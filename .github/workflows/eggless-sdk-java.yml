@@ -1,0 +1,50 @@
+name: Eggless Java SDK Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'eggless-sdk-java/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'eggless-sdk-java/**'
+
+jobs:
+  build-java-sdk:
+    name: Build & Package Java SDK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven
+        working-directory: ./eggless-sdk-java
+        run: mvn clean package -DskipTests
+
+      - name: Upload Core SDK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eggless-java-core-jar
+          path: ./eggless-sdk-java/eggless-java-core/target/*.jar
+
+      - name: Upload Logback Appender Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eggless-logback-appender-jar
+          path: ./eggless-sdk-java/eggless-logback-appender/target/*.jar
+
+      - name: Upload Spring Boot Starter Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eggless-spring-boot-starter-jar
+          path: ./eggless-sdk-java/eggless-spring-boot-starter/target/*.jar

@@ -201,9 +201,15 @@ export class SettingsComponent {
 
   generateKey() {
     if (this.newKeyName) {
-      const keyObj = this.logService.createApiKey(this.newKeyName);
-      this.createdKeyToken = keyObj.token || null;
-      this.showCreateModal = false;
+      this.logService.createApiKey(this.newKeyName).subscribe({
+        next: (keyObj) => {
+          this.createdKeyToken = keyObj.token || null;
+          this.showCreateModal = false;
+        },
+        error: () => {
+          console.error('Failed to create API key');
+        }
+      });
     }
   }
 
