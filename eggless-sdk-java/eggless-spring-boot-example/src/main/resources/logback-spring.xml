@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [traceId=%X{traceId:-none}] - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="EGGLESS" class="io.eggless.sdk.logback.EgglessLogbackAppender">
+        <serverUrl>http://localhost:8080</serverUrl>
+        <apiKey>egg_live_998877665544332211</apiKey>
+        <serviceName>order-service</serviceName>
+        <environment>production</environment>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="EGGLESS"/>
+    </root>
+</configuration>

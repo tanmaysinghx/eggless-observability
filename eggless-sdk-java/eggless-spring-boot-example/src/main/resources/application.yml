@@ -1,0 +1,16 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: order-service
+
+eggless:
+  enabled: true
+  server-url: http://localhost:8080
+  api-key: egg_live_998877665544332211
+  service-name: order-service
+  environment: production
+  batch-size: 10
+  flush-interval-ms: 1000
+  trace-filter-enabled: true
