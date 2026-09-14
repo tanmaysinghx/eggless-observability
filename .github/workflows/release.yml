@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: 'eggless-server/go.sum'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'eggless-client/package-lock.json'
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # 1. Build Angular Frontend
+      - name: Install Frontend Dependencies
+        working-directory: ./eggless-client
+        run: npm ci
+
+      - name: Build Angular App
+        working-directory: ./eggless-client
+        run: npm run build
+
+      # 2. Prepare Go Embed
+      - name: Move Frontend to Go Public Directory
+        run: |
+          mkdir -p eggless-server/public
+          # Remove placeholder index.html
+          rm -f eggless-server/public/index.html
+          # Copy Angular dist files into the public directory for embedding
+          cp -r eggless-client/dist/eggless-client/browser/* eggless-server/public/
+
+      # 3. Build Go Backend (Cross-Compile)
+      - name: Build Go Binaries
+        working-directory: ./eggless-server
+        run: |
+          mkdir -p build
+          
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 go build -o build/eggless-server-linux-amd64 .
+          
+          # Linux arm64
+          GOOS=linux GOARCH=arm64 go build -o build/eggless-server-linux-arm64 .
+          
+          # Windows amd64
+          GOOS=windows GOARCH=amd64 go build -o build/eggless-server-windows-amd64.exe .
+          
+          # macOS arm64 (Apple Silicon)
+          GOOS=darwin GOARCH=arm64 go build -o build/eggless-server-darwin-arm64 .
+
+      # 4. Build Java SDK
+      - name: Build Java SDK
+        working-directory: ./eggless-sdk-java
+        run: mvn clean package -DskipTests
+
+      # 5. Generate Checksums
+      - name: Generate Checksums
+        run: |
+          cd eggless-server/build
+          sha256sum eggless-server-linux-amd64 > eggless-server-linux-amd64.sha256
+          sha256sum eggless-server-linux-arm64 > eggless-server-linux-arm64.sha256
+          sha256sum eggless-server-windows-amd64.exe > eggless-server-windows-amd64.exe.sha256
+          sha256sum eggless-server-darwin-arm64 > eggless-server-darwin-arm64.sha256
+
+      # 6. Publish Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          name: Eggless Observability ${{ github.event.inputs.tag_name || github.ref_name }}
+          draft: false
+          prerelease: false
+          make_latest: true
+          generate_release_notes: true
+          files: |
+            eggless-server/build/*
+            eggless-sdk-java/eggless-java-core/target/*.jar
+            eggless-sdk-java/eggless-logback-appender/target/*.jar
+            eggless-sdk-java/eggless-spring-boot-starter/target/*.jar
+          body: |
+            ## Eggless Observability Platform (Standalone Release)
+
+            ### Direct Downloads (Platform)
+            These binaries contain **both** the backend APIs and the Angular Web UI embedded within a single executable! Just run it!
+            
+            - **[Linux AMD64](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-server-linux-amd64)**
+            - **[Linux ARM64](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-server-linux-arm64)**
+            - **[Windows AMD64](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-server-windows-amd64.exe)**
+            - **[macOS ARM64 (Apple Silicon)](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-server-darwin-arm64)**
+
+            ### Quick Start
+            ```bash
+            # Download (Example for Linux AMD64)
+            curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-server-linux-amd64
+            chmod +x eggless-server-linux-amd64
+
+            # Run (Starts backend and serves UI on port 8080)
+            ./eggless-server-linux-amd64
+            ```
+
+            Then navigate to `http://localhost:8080` in your browser.
+
+            ### Java SDK Artifacts
+            The multi-module SDK JARs are also attached to this release.

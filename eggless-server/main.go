@@ -1,9 +1,12 @@
 package main
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
+	"strings"
 
 	"golang.org/x/net/websocket"
 
@@ -11,6 +14,9 @@ import (
 	"eggless-server/simulator"
 	"eggless-server/storage"
 )
+
+//go:embed public/*
+var publicFiles embed.FS
 
 // corsMiddleware enables CORS for Angular frontend & external ingestion SDKs
 func corsMiddleware(next http.Handler) http.Handler {
@@ -63,6 +69,29 @@ func main() {
 
 	// WebSocket Live Tail Endpoint
 	mux.Handle("/api/v1/logs/stream", websocket.Handler(h.WebSocketStreamHandler))
+
+	// Serve Embedded Angular Frontend
+	subFS, err := fs.Sub(publicFiles, "public")
+	if err != nil {
+		log.Fatalf("Failed to create sub filesystem: %v", err)
+	}
+	fileServer := http.FileServer(http.FS(subFS))
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// If requesting an API endpoint that isn't registered, return 404
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			http.NotFound(w, r)
+			return
+		}
+		
+		// Check if the requested file exists in the embedded FS
+		_, err := fs.Stat(subFS, strings.TrimPrefix(r.URL.Path, "/"))
+		if err != nil {
+			// File not found, serve index.html for Angular pushState routing
+			r.URL.Path = "/"
+		}
+		fileServer.ServeHTTP(w, r)
+	})
 
 	port := "8080"
 	serverAddr := ":" + port

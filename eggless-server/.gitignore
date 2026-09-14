@@ -1,0 +1,10 @@
+# Binaries
+eggless-server.exe
+eggless-server
+
+# Build outputs
+build/
+
+# Embedded frontend (only keep placeholder index.html)
+public/*
+!public/index.html
