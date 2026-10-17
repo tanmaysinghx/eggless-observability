@@ -22,25 +22,19 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          cache-dependency-path: 'eggless-server/go.sum'
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'eggless-client/package-lock.json'
-
-      - name: Setup Java JDK
+      - name: Setup Java JDK 25
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '25'
           distribution: 'temurin'
-          cache: 'maven'
+          cache: 'gradle'
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'eggless-client/package-lock.json'
 
       # 1. Build Angular Frontend
       - name: Install Frontend Dependencies
@@ -51,32 +45,18 @@ jobs:
         working-directory: ./eggless-client
         run: npm run build
 
-      # 2. Prepare Go Embed
-      - name: Move Frontend to Go Public Directory
+      # 2. Bundle Frontend into Spring Boot static resources
+      - name: Bundle Frontend into Static Resources
         run: |
-          mkdir -p eggless-server/public
-          # Remove placeholder index.html
-          rm -f eggless-server/public/index.html
-          # Copy Angular dist files into the public directory for embedding
-          cp -r eggless-client/dist/eggless-client/browser/* eggless-server/public/
+          mkdir -p eggless-server/src/main/resources/static
+          cp -r eggless-client/dist/eggless-client/browser/* eggless-server/src/main/resources/static/
 
-      # 3. Build Go Backend (Cross-Compile)
-      - name: Build Go Binaries
+      # 3. Package Spring Boot Standalone Executable JAR
+      - name: Package Spring Boot Standalone JAR
         working-directory: ./eggless-server
         run: |
-          mkdir -p build
-          
-          # Linux amd64
-          GOOS=linux GOARCH=amd64 go build -o build/eggless-server-linux-amd64 .
-          
-          # Linux arm64
-          GOOS=linux GOARCH=arm64 go build -o build/eggless-server-linux-arm64 .
-          
-          # Windows amd64
-          GOOS=windows GOARCH=amd64 go build -o build/eggless-server-windows-amd64.exe .
-          
-          # macOS arm64 (Apple Silicon)
-          GOOS=darwin GOARCH=arm64 go build -o build/eggless-server-darwin-arm64 .
+          chmod +x gradlew
+          ./gradlew bootJar -x test
 
       # 4. Build Java SDK
       - name: Build Java SDK
@@ -86,13 +66,11 @@ jobs:
       # 5. Generate Checksums
       - name: Generate Checksums
         run: |
-          cd eggless-server/build
-          sha256sum eggless-server-linux-amd64 > eggless-server-linux-amd64.sha256
-          sha256sum eggless-server-linux-arm64 > eggless-server-linux-arm64.sha256
-          sha256sum eggless-server-windows-amd64.exe > eggless-server-windows-amd64.exe.sha256
-          sha256sum eggless-server-darwin-arm64 > eggless-server-darwin-arm64.sha256
+          cd eggless-server/build/libs
+          sha256sum eggless-observability.jar > eggless-observability.jar.sha256
+          echo "SHA256: $(cat eggless-observability.jar.sha256)"
 
-      # 6. Publish Release
+      # 6. Publish GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -103,32 +81,32 @@ jobs:
           make_latest: true
           generate_release_notes: true
           files: |
-            eggless-server/build/*
+            eggless-server/build/libs/eggless-observability.jar
+            eggless-server/build/libs/eggless-observability.jar.sha256
             eggless-sdk-java/eggless-java-core/target/*.jar
             eggless-sdk-java/eggless-logback-appender/target/*.jar
             eggless-sdk-java/eggless-spring-boot-starter/target/*.jar
           body: |
-            ## Eggless Observability Platform (Standalone Release)
+            ## Eggless Observability Platform (Standalone Executable JAR)
 
-            ### Direct Downloads (Platform)
-            These binaries contain **both** the backend APIs and the Angular Web UI embedded within a single executable! Just run it!
+            ### Direct Download (Single Runnable Artifact)
+            The standalone JAR contains **both** the backend API/WebSocket engine and the Angular Web UI embedded within a single executable:
             
-            - **[Linux AMD64](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-server-linux-amd64)**
-            - **[Linux ARM64](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-server-linux-arm64)**
-            - **[Windows AMD64](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-server-windows-amd64.exe)**
-            - **[macOS ARM64 (Apple Silicon)](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-server-darwin-arm64)**
+            - **[eggless-observability.jar](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-observability.jar)** (Fat JAR, includes Angular Console SPA)
+            - **[eggless-observability.jar.sha256](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-observability.jar.sha256)**
 
-            ### Quick Start
+            ### Quick Start (Java 25+)
             ```bash
-            # Download (Example for Linux AMD64)
-            curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-server-linux-amd64
-            chmod +x eggless-server-linux-amd64
+            # 1. Download
+            curl -LO https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag_name || github.ref_name }}/eggless-observability.jar
 
-            # Run (Starts backend and serves UI on port 8080)
-            ./eggless-server-linux-amd64
+            # 2. Run with Embedded Persistent H2 (Zero Setup)
+            java -jar eggless-observability.jar
             ```
 
-            Then navigate to `http://localhost:8080` in your browser.
+            Open **`http://localhost:8080`** in your browser.
 
-            ### Java SDK Artifacts
-            The multi-module SDK JARs are also attached to this release.
+            ### Custom Database (PostgreSQL / MySQL)
+            ```bash
+            DB_URL=jdbc:postgresql://localhost:5432/eggless DB_USERNAME=postgres DB_PASSWORD=secret java -jar eggless-observability.jar
+            ```
