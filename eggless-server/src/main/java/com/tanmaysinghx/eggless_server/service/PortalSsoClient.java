@@ -49,10 +49,16 @@ public class PortalSsoClient {
                     .header("X-Portal-App-Key", properties.getAppKey())
                     .body(new PortalAuthRequest(email, password))
                     .retrieve()
-                    .onStatus(HttpStatusCode::is4xxClientError, (request, response) -> {
-                        log.warn("Portal SSO 4xx response: {}", response.getStatusCode());
-                    })
                     .body(PortalAuthResponse.class);
+        } catch (org.springframework.web.client.RestClientResponseException rcEx) {
+            String body = rcEx.getResponseBodyAsString();
+            log.error("Portal SSO login error ({}): {}", rcEx.getStatusCode(), body);
+            String message = extractErrorMessage(body, "Portal SSO authentication failed (" + rcEx.getStatusCode() + ")");
+            return PortalAuthResponse.builder()
+                    .authenticated(false)
+                    .error("AUTH_FAILED")
+                    .message(message)
+                    .build();
         } catch (Exception e) {
             log.error("Portal SSO login failed: {}", e.getMessage());
             return PortalAuthResponse.builder()
@@ -77,6 +83,15 @@ public class PortalSsoClient {
                     .body(new PortalRegisterRequest(email, password, firstName, lastName))
                     .retrieve()
                     .body(PortalAuthResponse.class);
+        } catch (org.springframework.web.client.RestClientResponseException rcEx) {
+            String body = rcEx.getResponseBodyAsString();
+            log.error("Portal SSO registration error ({}): {}", rcEx.getStatusCode(), body);
+            String message = extractErrorMessage(body, "Portal SSO registration failed (" + rcEx.getStatusCode() + ")");
+            return PortalAuthResponse.builder()
+                    .authenticated(false)
+                    .error("REGISTRATION_FAILED")
+                    .message(message)
+                    .build();
         } catch (Exception e) {
             log.error("Portal SSO registration failed: {}", e.getMessage());
             return PortalAuthResponse.builder()
@@ -105,13 +120,23 @@ public class PortalSsoClient {
         form.add("redirect_uri", uriToUse);
         form.add("code_verifier", codeVerifier);
 
+        if (properties.getClientSecret() != null && !properties.getClientSecret().isBlank()) {
+            form.add("client_secret", properties.getClientSecret());
+        }
+
         try {
-            Map<String, Object> tokenResponse = restClient.post()
+            var requestSpec = restClient.post()
                     .uri(tokenUrl)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                    .body(form)
-                    .retrieve()
-                    .body(Map.class);
+                    .body(form);
+
+            if (properties.getClientSecret() != null && !properties.getClientSecret().isBlank()) {
+                String credentials = properties.getClientId() + ":" + properties.getClientSecret();
+                String basicAuth = java.util.Base64.getEncoder().encodeToString(credentials.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                requestSpec.header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth);
+            }
+
+            Map<String, Object> tokenResponse = requestSpec.retrieve().body(Map.class);
 
             if (tokenResponse != null && tokenResponse.containsKey("access_token")) {
                 String accessToken = (String) tokenResponse.get("access_token");
@@ -129,10 +154,36 @@ public class PortalSsoClient {
                 }
             }
             return tokenResponse;
+        } catch (org.springframework.web.client.RestClientResponseException rcEx) {
+            String errorBody = rcEx.getResponseBodyAsString();
+            log.error("Portal SSO OAuth token exchange error ({}): {}", rcEx.getStatusCode(), errorBody);
+            String msg = extractErrorMessage(errorBody, "HTTP " + rcEx.getStatusCode());
+            throw new RuntimeException("Token exchange failed with Portal SSO: " + msg);
         } catch (Exception e) {
             log.error("Portal SSO OAuth token exchange error: {}", e.getMessage());
             throw new RuntimeException("Token exchange failed with Portal SSO: " + e.getMessage());
         }
+    }
+
+    private String extractErrorMessage(String jsonBody, String defaultMessage) {
+        if (jsonBody == null || jsonBody.isBlank()) {
+            return defaultMessage;
+        }
+        try {
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var node = mapper.readTree(jsonBody);
+            if (node.has("message") && !node.get("message").asText().isBlank()) {
+                return node.get("message").asText();
+            }
+            if (node.has("error_description") && !node.get("error_description").asText().isBlank()) {
+                return node.get("error_description").asText();
+            }
+            if (node.has("error") && !node.get("error").asText().isBlank()) {
+                return node.get("error").asText();
+            }
+        } catch (Exception ignored) {
+        }
+        return defaultMessage;
     }
 
     /**

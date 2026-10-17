@@ -49,7 +49,7 @@ export interface PortalSsoConfig {
 
 const DEFAULT_PORTAL_CONFIG: PortalSsoConfig = {
   baseUrl: 'https://portal.tanmaysinghx.com',
-  applicationId: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+  applicationId: '5de93ba7-0673-4fba-8e9b-a1bdb8466f03',
   clientId: 'eggless-observability',
   redirectUri: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : 'https://eggless.tanmaysinghx.com/auth/callback'
 };

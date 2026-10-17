@@ -16,7 +16,7 @@ public class PortalSsoProperties {
     /**
      * Application ID registered in Portal SSO Admin Console.
      */
-    private String applicationId = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+    private String applicationId = "5de93ba7-0673-4fba-8e9b-a1bdb8466f03";
 
     /**
      * Application Secret API Key (X-Portal-App-Key) generated in Portal SSO.
@@ -27,6 +27,11 @@ public class PortalSsoProperties {
      * OAuth 2.1 Client ID for interactive browser logins.
      */
     private String clientId = "eggless-observability";
+
+    /**
+     * Optional OAuth 2.1 Client Secret if the client was registered as Confidential.
+     */
+    private String clientSecret = "";
 
     /**
      * Allowed redirect URI for OIDC PKCE callbacks.
