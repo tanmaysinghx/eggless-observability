@@ -335,12 +335,7 @@ export class SsoService {
 
   public async checkPortalSsoHealth(): Promise<{ ok: boolean; message: string }> {
     try {
-      const url = `${this.config.baseUrl.replace(/\/+$/, '')}/.well-known/openid-configuration`;
-      const res = await fetch(url, { method: 'GET', mode: 'cors' });
-      if (res.ok) {
-        return { ok: true, message: 'Portal SSO OIDC Provider reachable and ready.' };
-      }
-      return { ok: false, message: `Portal SSO returned status: ${res.status}` };
+      return await firstValueFrom(this.http.get<{ ok: boolean; message: string }>(`${this.backendAuthUrl}/health`));
     } catch (e: any) {
       return { ok: false, message: e.message || 'Could not connect to Portal SSO server' };
     }

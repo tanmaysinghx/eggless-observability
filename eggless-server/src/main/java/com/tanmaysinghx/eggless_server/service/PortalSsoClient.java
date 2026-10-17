@@ -13,6 +13,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -184,6 +185,28 @@ public class PortalSsoClient {
         } catch (Exception ignored) {
         }
         return defaultMessage;
+    }
+
+    /**
+     * Checks if Portal SSO OIDC Discovery is reachable and healthy server-to-server.
+     */
+    public Map<String, Object> checkHealth() {
+        String base = properties.getBaseUrl() != null ? properties.getBaseUrl().replaceAll("/+$", "") : "https://portal.tanmaysinghx.com";
+        String url = base + "/.well-known/openid-configuration";
+        Map<String, Object> result = new HashMap<>();
+        try {
+            var response = restClient.get()
+                    .uri(url)
+                    .retrieve()
+                    .toBodilessEntity();
+            result.put("ok", response.getStatusCode().is2xxSuccessful());
+            result.put("message", "Portal SSO OIDC Provider reachable and ready.");
+        } catch (Exception e) {
+            log.warn("Health check to Portal SSO failed: {}", e.getMessage());
+            result.put("ok", false);
+            result.put("message", e.getMessage() != null ? e.getMessage() : "Could not connect to Portal SSO server");
+        }
+        return result;
     }
 
     /**

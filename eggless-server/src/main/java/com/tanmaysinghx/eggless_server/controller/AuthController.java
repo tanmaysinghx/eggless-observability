@@ -56,6 +56,14 @@ public class AuthController {
     }
 
     /**
+     * Proxies Portal SSO health/discovery check to avoid browser CORS restrictions.
+     */
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> checkHealth() {
+        return ResponseEntity.ok(portalSsoClient.checkHealth());
+    }
+
+    /**
      * Proxies credentials login to Portal SSO External Auth API.
      * Keeps X-Portal-App-Key securely on the server side.
      */
