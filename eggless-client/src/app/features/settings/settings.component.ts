@@ -1,7 +1,7 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { LogService } from '../../core/services/log.service';
 import { SsoService, SsoUser, PortalSsoConfig } from '../../core/services/sso.service';
 import { ApiKey } from '../../core/models/log.model';
@@ -9,7 +9,7 @@ import { ApiKey } from '../../core/models/log.model';
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="h-full flex flex-col bg-slate-50 dark:bg-[#0b0e14] p-6 gap-6 text-xs overflow-y-auto font-sans transition-colors">
       <!-- Header -->
@@ -37,6 +37,15 @@ import { ApiKey } from '../../core/models/log.model';
           <p class="text-slate-500 dark:text-[#64748b] text-xs mt-0.5">
             Connect Eggless Observability with your centralized Portal SSO identity provider for browser SSO and programmatic AI agent authentication.
           </p>
+        </div>
+
+        <!-- One-click connection (no secrets to copy) -->
+        <div class="p-4 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 text-xs flex items-center justify-between gap-3">
+          <div>
+            <div class="font-semibold text-slate-900 dark:text-[#f0f4f8]">Connect with Portal SSO</div>
+            <div class="text-slate-500 dark:text-[#94a3b8]">See the connection, reconnect, or disconnect. Credentials are delivered by Portal directly to the server.</div>
+          </div>
+          <a routerLink="/setup" class="shrink-0 px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold">Manage connection</a>
         </div>
 
         <!-- Connection Test Result Banner -->

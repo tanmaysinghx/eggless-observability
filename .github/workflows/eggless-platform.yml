@@ -169,14 +169,14 @@ jobs:
         run: npx ng build
 
       # Portal SSO rule: the client secret and app API key are server-side only.
-      # - name: Assert no Portal secrets in the bundle
-      #   working-directory: eggless-client
-      #   run: |
-      #     if grep -rEl 'psso_app_[A-Za-z0-9_-]{20,}|client_secret=' dist/; then
-      #       echo "::error::A Portal SSO secret pattern was found in the browser bundle."
-      #       exit 1
-      #     fi
-      #     echo "No Portal SSO secrets in dist/."
+      - name: Assert no Portal secrets in the bundle
+        working-directory: eggless-client
+        run: |
+          if grep -rEl 'psso_app_[A-Za-z0-9_-]{20,}|client_secret=' dist/; then
+            echo "::error::A Portal SSO secret pattern was found in the browser bundle."
+            exit 1
+          fi
+          echo "No Portal SSO secrets in dist/."
 
       - name: Bundle summary
         working-directory: eggless-client
@@ -237,32 +237,32 @@ jobs:
 
   # Portal SSO credentials were once committed to this repository. This makes a repeat a red build
   # instead of a rotation exercise.
-  # secrets:
-  #   name: "Stage 1 · Secret scan"
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
+  secrets:
+    name: "Stage 1 · Secret scan"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-  #     - name: No committed .env files
-  #       run: |
-  #         tracked=$(git ls-files | grep -E '(^|/)\.env(\..+)?$' | grep -v '\.env\.example$' || true)
-  #         if [ -n "$tracked" ]; then
-  #           echo "::error::.env files must never be committed: $tracked"
-  #           exit 1
-  #         fi
+      - name: No committed .env files
+        run: |
+          tracked=$(git ls-files | grep -E '(^|/)\.env(\..+)?$' | grep -v '\.env\.example$' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::.env files must never be committed: $tracked"
+            exit 1
+          fi
 
-  #     - name: No Portal SSO secrets in source
-  #       run: |
-  #         found=0
-  #         if git grep -nE 'psso_app_[A-Za-z0-9_-]{20,}'; then
-  #           echo "::error::A Portal SSO app API key is committed. Rotate it in Portal SSO and read it from PORTAL_API_KEY."
-  #           found=1
-  #         fi
-  #         if git grep -nEi '(PORTAL_CLIENT_SECRET|client-?secret)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_-]{20,}'; then
-  #           echo "::error::A Portal SSO client secret is committed. Rotate it in Portal SSO and read it from PORTAL_CLIENT_SECRET."
-  #           found=1
-  #         fi
-  #         exit $found
+      - name: No Portal SSO secrets in source
+        run: |
+          found=0
+          if git grep -nE 'psso_app_[A-Za-z0-9_-]{20,}'; then
+            echo "::error::A Portal SSO app API key is committed. Rotate it in Portal SSO and read it from PORTAL_API_KEY."
+            found=1
+          fi
+          if git grep -nEi '(PORTAL_CLIENT_SECRET|client-?secret)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_-]{20,}'; then
+            echo "::error::A Portal SSO client secret is committed. Rotate it in Portal SSO and read it from PORTAL_CLIENT_SECRET."
+            found=1
+          fi
+          exit $found
 
   # ───────────────────────────────────────────────────────────────────────────────────────────────
   # Stage 2 · Static analysis
@@ -326,7 +326,10 @@ jobs:
       # secrets on the server.
       - name: Smoke test the image
         run: |
+          # Configured by environment: the deployment mode that must keep working and win over Connect.
           docker run -d --name ci-app -p 8080:8080 \
+            -e PORTAL_URL=https://portal.example.test \
+            -e PORTAL_REDIRECT_URI=https://eggless.example.test/auth/callback \
             -e PORTAL_CLIENT_SECRET=ci-fake-secret \
             -e PORTAL_API_KEY=psso_app_ci-fake \
             eggless-observability:ci
@@ -354,14 +357,22 @@ jobs:
             || { echo "::error::Console index.html was not served."; exit 1; }
           curl -fsS http://localhost:8080/auth/callback | grep -q '<app-root' \
             || { echo "::error::/auth/callback did not fall through to the console."; exit 1; }
+          curl -fsS http://localhost:8080/setup | grep -q '<app-root' \
+            || { echo "::error::/setup did not fall through to the console."; exit 1; }
+
+          # Env vars win: Connect must report "environment" and refuse to start.
+          curl -fsS http://localhost:8080/api/portal-connect/status | grep -q '"mode":"environment"' \
+            || { echo "::error::With PORTAL_* secrets set, /api/portal-connect/status is not 'environment'."; exit 1; }
 
           # Public SSO config is served with the exact registered redirect URI and no secrets.
           config=$(curl -fsS http://localhost:8080/api/auth/config)
           echo "SSO config: $config"
           echo "$config" | grep -q '"clientId":"eggless-observability"' \
             || { echo "::error::/api/auth/config did not return the Portal client ID."; exit 1; }
-          echo "$config" | grep -q '"redirectUri":"https://eggless.tanmaysinghx.com/auth/callback"' \
+          echo "$config" | grep -q '"redirectUri":"https://eggless.example.test/auth/callback"' \
             || { echo "::error::/api/auth/config did not return the registered redirect URI."; exit 1; }
+          echo "$config" | grep -q '"configured":true' \
+            || { echo "::error::/api/auth/config does not report the env-configured Portal as configured."; exit 1; }
           if echo "$config" | grep -qE 'ci-fake-secret|psso_app_ci-fake'; then
             echo "::error::/api/auth/config leaked a Portal SSO secret."
             exit 1
@@ -370,6 +381,29 @@ jobs:
             echo "::error::A Portal SSO secret was written to the application log."
             exit 1
           fi
+
+          # Fresh install with no Portal settings: must boot, point the operator at Connect, and hide nothing
+          # it shouldn't. The hardcoded tanmaysinghx.com Portal is gone, so nothing may default to it.
+          docker run -d --name ci-fresh -p 8081:8080 eggless-observability:ci
+          for i in $(seq 1 40); do
+            curl -fsS http://localhost:8081/actuator/health 2>/dev/null | grep -q '"status":"UP"' && break
+            sleep 3
+          done
+          curl -fsS http://localhost:8081/api/portal-connect/status | grep -q '"mode":"not_connected"' \
+            || { echo "::error::A fresh install does not report not_connected."; docker logs ci-fresh; exit 1; }
+          fresh=$(curl -fsS http://localhost:8081/api/auth/config)
+          echo "$fresh" | grep -q '"configured":false' \
+            || { echo "::error::A fresh install claims to be configured: $fresh"; exit 1; }
+          if echo "$fresh" | grep -q 'tanmaysinghx'; then
+            echo "::error::A fresh install still defaults to a hardcoded Portal: $fresh"; exit 1
+          fi
+          docker logs ci-fresh 2>&1 | grep -q 'not connected to Portal SSO yet' \
+            || { echo "::error::A fresh install did not print the setup token banner."; docker logs ci-fresh; exit 1; }
+          # Starting a connection needs the setup token; a guess must be refused.
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8081/api/portal-connect/start \
+                   -H 'Content-Type: application/json' \
+                   -d '{"portalUrl":"https://portal.example.test","setupToken":"wrong"}')
+          [ "$code" = "403" ] || { echo "::error::/api/portal-connect/start accepted a wrong setup token (HTTP $code)."; exit 1; }
 
           size=$(docker image inspect eggless-observability:ci --format '{{.Size}}' | awk '{printf "%.0f MB", $1/1024/1024}')
           {
@@ -381,11 +415,14 @@ jobs:
             echo "| Healthy after | ${boot_seconds}s |"
             echo "| Console served | yes |"
             echo "| SSO config | registered redirect URI, no secrets |"
+            echo "| Fresh install | not connected, setup token required |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Container logs on failure
         if: failure()
-        run: docker logs ci-app || true
+        run: |
+          docker logs ci-app || true
+          docker logs ci-fresh || true
 
   # ───────────────────────────────────────────────────────────────────────────────────────────────
   # Stage 4 · Gate
@@ -486,8 +523,10 @@ jobs:
             Open **http://localhost:8080**. Data is stored in an embedded H2 database under `~/.eggless`.
 
             ### Portal SSO
-            Put the Portal SSO settings in a `.env` next to the jar (see `.env.example`) or export them:
-            `PORTAL_URL`, `PORTAL_CLIENT_ID`, `PORTAL_REDIRECT_URI`, `PORTAL_SCOPES`, `PORTAL_CLIENT_SECRET`, `PORTAL_API_KEY`.
+            Open Eggless and use **Connect with Portal SSO** on `/setup`: enter your Portal URL and the setup token
+            printed at first start, and a Portal administrator approves. No secrets to copy.
+            Prefer configuration files? Set `PORTAL_URL`, `PORTAL_CLIENT_ID`, `PORTAL_REDIRECT_URI`, `PORTAL_SCOPES`,
+            `PORTAL_CLIENT_SECRET`, `PORTAL_API_KEY` (see `.env.example`); environment variables take precedence.
 
             ### Custom database (PostgreSQL / MySQL)
             ```bash

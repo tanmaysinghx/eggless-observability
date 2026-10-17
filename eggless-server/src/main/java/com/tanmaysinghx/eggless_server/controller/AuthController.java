@@ -37,6 +37,9 @@ public class AuthController {
         config.put("redirectUri", properties.getRedirectUri());
         config.put("scopes", properties.getScopes());
         config.put("hasAppKey", properties.getAppKey() != null && !properties.getAppKey().isBlank());
+        // False until env vars or "Connect with Portal SSO" supply a Portal; the login screen then offers setup.
+        config.put("configured", !properties.getNormalizedBaseUrl().isBlank()
+                && properties.getClientSecret() != null && !properties.getClientSecret().isBlank());
         return ResponseEntity.ok(config);
     }
 

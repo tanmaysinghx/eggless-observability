@@ -49,12 +49,13 @@ export interface PortalSsoConfig {
   scopes: string;
 }
 
-// Fallbacks only; the backend's /api/auth/config (driven by PORTAL_* env vars) is authoritative.
+// Placeholders until the backend's /api/auth/config answers; it is authoritative (env vars or a
+// stored "Connect with Portal SSO" connection).
 const DEFAULT_PORTAL_CONFIG: PortalSsoConfig = {
-  baseUrl: 'https://portal.tanmaysinghx.com',
-  applicationId: '5de93ba7-0673-4fba-8e9b-a1bdb8466f03',
+  baseUrl: '',
+  applicationId: '',
   clientId: 'eggless-observability',
-  redirectUri: 'https://eggless.tanmaysinghx.com/auth/callback',
+  redirectUri: '',
   scopes: 'openid profile email'
 };
 
@@ -80,6 +81,7 @@ export class SsoService {
   public isAuthenticated$: Observable<boolean> = this.isAuthenticatedSubject.asObservable();
 
   private configReady: Promise<void>;
+  private configured = false;
 
   constructor() {
     this.restoreSession();
@@ -88,6 +90,12 @@ export class SsoService {
 
   public get currentUserValue(): SsoUser | null {
     return this.currentUserSubject.value;
+  }
+
+  /** Whether the backend has a Portal to sign in with; false means the operator must run /setup. */
+  public async isConfigured(): Promise<boolean> {
+    await this.configReady;
+    return this.configured;
   }
 
   public getConfig(): PortalSsoConfig {
@@ -118,11 +126,12 @@ export class SsoService {
   private async syncBackendConfig() {
     try {
       const res = await firstValueFrom(this.http.get<any>(`${this.backendAuthUrl}/config`));
-      if (res && res.baseUrl) {
-        this.config.baseUrl = res.baseUrl;
-        if (res.applicationId) this.config.applicationId = res.applicationId;
+      if (res) {
+        this.configured = res.configured !== false && !!res.baseUrl;
+        this.config.baseUrl = res.baseUrl || '';
+        this.config.applicationId = res.applicationId || '';
         if (res.clientId) this.config.clientId = res.clientId;
-        if (res.redirectUri) this.config.redirectUri = res.redirectUri;
+        this.config.redirectUri = res.redirectUri || '';
         if (res.scopes) this.config.scopes = res.scopes;
         localStorage.setItem('eggless_portal_config', JSON.stringify(this.config));
       }

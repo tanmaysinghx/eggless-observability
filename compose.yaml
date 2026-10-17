@@ -26,6 +26,7 @@ services:
       # DB_PASSWORD: "secretpassword"
       PORTAL_URL: "${PORTAL_URL:-https://portal.tanmaysinghx.com}"
       PORTAL_CLIENT_ID: "${PORTAL_CLIENT_ID:-eggless-observability}"
+      PORTAL_APP_ID: "${PORTAL_APP_ID:-5de93ba7-0673-4fba-8e9b-a1bdb8466f03}"
       PORTAL_REDIRECT_URI: "${PORTAL_REDIRECT_URI:-https://eggless.tanmaysinghx.com/auth/callback}"
       PORTAL_SCOPES: "${PORTAL_SCOPES:-openid profile email}"
       # Secrets: set in .env (git-ignored) or your secret manager

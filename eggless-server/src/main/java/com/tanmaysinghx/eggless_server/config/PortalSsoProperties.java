@@ -6,7 +6,8 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Portal SSO settings, bound from environment variables in application.yaml.
- * Secrets (clientSecret, appKey) have no defaults and must come from the environment / secret store.
+ * Populated from environment variables, or at runtime by PortalConnectService from a stored
+ * "Connect with Portal SSO" connection. Secrets (clientSecret, appKey) never have defaults.
  */
 @Data
 @Configuration
@@ -15,12 +16,12 @@ public class PortalSsoProperties {
     /**
      * Issuer / base URL of the Portal SSO instance (PORTAL_URL).
      */
-    private String baseUrl = "https://portal.tanmaysinghx.com";
+    private String baseUrl = "";
 
     /**
      * Application ID registered in Portal SSO (used by the External Auth API paths).
      */
-    private String applicationId = "5de93ba7-0673-4fba-8e9b-a1bdb8466f03";
+    private String applicationId = "";
 
     /**
      * External Auth API key sent as X-Portal-App-Key (PORTAL_API_KEY). Backend only.
@@ -40,7 +41,7 @@ public class PortalSsoProperties {
     /**
      * Registered redirect URI for full-page redirect logins (PORTAL_REDIRECT_URI). Must match Portal SSO exactly.
      */
-    private String redirectUri = "https://eggless.tanmaysinghx.com/auth/callback";
+    private String redirectUri = "";
 
     /**
      * Requested OAuth scopes (PORTAL_SCOPES).

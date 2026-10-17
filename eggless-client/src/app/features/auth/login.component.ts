@@ -232,13 +232,19 @@ export class LoginComponent implements OnInit {
 
   private returnUrl = '/logs';
 
-  ngOnInit() {
+  async ngOnInit() {
     this.route.queryParams.subscribe(params => {
       if (params['returnUrl']) {
         this.returnUrl = params['returnUrl'];
       }
     });
 
+    // Nothing to sign in with until Eggless is connected to a Portal.
+    if (!(await this.ssoService.isConfigured())) {
+      this.router.navigate(['/setup']);
+      return;
+    }
+    this.portalConfig = this.ssoService.getConfig();
     this.checkHealth();
   }
 

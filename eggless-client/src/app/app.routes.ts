@@ -8,11 +8,13 @@ import { ApplicationsComponent } from './features/applications/applications.comp
 import { DashboardsComponent } from './features/dashboards/dashboards.component';
 import { AlertsComponent } from './features/alerts/alerts.component';
 import { SettingsComponent } from './features/settings/settings.component';
+import { SetupComponent } from './features/setup/setup.component';
 import { authGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'auth/callback', component: AuthCallbackComponent },
+  { path: 'setup', component: SetupComponent },
   {
     path: '',
     component: EgglessShellComponent,

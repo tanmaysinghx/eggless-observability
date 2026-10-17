@@ -37,16 +37,31 @@ server:
     mime-types: text/html,text/css,text/plain,application/javascript,text/javascript,application/json,image/svg+xml
     min-response-size: 1024
 
+eggless:
+  home: ${EGGLESS_HOME:${user.home}/.eggless}
+  # Public address of this Eggless instance, sent to Portal when connecting. Defaults to the address
+  # the operator's browser is using.
+  public-url: ${EGGLESS_PUBLIC_URL:}
+  # Guards "Connect with Portal SSO". Generated into ~/.eggless/secrets/setupToken and printed at
+  # startup when unset.
+  setup-token: ${EGGLESS_SETUP_TOKEN:}
+  # Base64 32-byte AES key for the stored Portal credentials. Generated into
+  # ~/.eggless/secrets/connection.key when unset; back it up with the database.
+  secret-key: ${EGGLESS_SECRET_KEY:}
+
 # Portal SSO Integration Configuration
-# Secrets (PORTAL_CLIENT_SECRET, PORTAL_API_KEY) have no defaults: supply them via env / secret store.
+# Two ways to configure it:
+#   1. "Connect with Portal SSO" on the /setup screen: no secrets to copy; they are stored encrypted.
+#   2. Environment variables below. If PORTAL_CLIENT_SECRET or PORTAL_API_KEY is set, the
+#      environment wins and option 1 is disabled.
 portal:
   sso:
-    base-url: ${PORTAL_URL:https://portal.tanmaysinghx.com}
-    application-id: ${PORTAL_APP_ID:5de93ba7-0673-4fba-8e9b-a1bdb8466f03}
+    base-url: ${PORTAL_URL:}
+    application-id: ${PORTAL_APP_ID:}
     app-key: ${PORTAL_API_KEY:}
     client-id: ${PORTAL_CLIENT_ID:eggless-observability}
     client-secret: ${PORTAL_CLIENT_SECRET:}
-    redirect-uri: ${PORTAL_REDIRECT_URI:https://eggless.tanmaysinghx.com/auth/callback}
+    redirect-uri: ${PORTAL_REDIRECT_URI:}
     scopes: ${PORTAL_SCOPES:openid profile email}
     login-endpoint: ${PORTAL_LOGIN_ENDPOINT:}
     register-endpoint: ${PORTAL_REGISTER_ENDPOINT:}

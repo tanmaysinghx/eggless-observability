@@ -194,6 +194,11 @@ public class PortalSsoClient {
         return result;
     }
 
+    /** Drops the cached ID-token decoder after the Portal connection changes (issuer or client ID). */
+    public synchronized void resetVerifier() {
+        idTokenDecoder = null;
+    }
+
     private synchronized JwtDecoder idTokenDecoder() {
         if (idTokenDecoder == null) {
             String issuer = properties.getNormalizedBaseUrl();

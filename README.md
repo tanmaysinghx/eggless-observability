@@ -101,7 +101,20 @@ The resulting artifact is placed at:
 
 ## 🔐 Portal SSO Integration
 
-Eggless Observability integrates seamlessly with **Portal SSO** for both interactive browser single sign-on and programmatic agent authentication:
+Eggless Observability integrates seamlessly with **Portal SSO** for both interactive browser single sign-on and programmatic agent authentication.
+
+### Quick setup: Connect with Portal SSO (no secrets to copy)
+
+1. Start Eggless. On first boot it prints a **setup token** (also in `~/.eggless/secrets/setupToken`).
+2. Open Eggless. It sends you to **/setup**. Enter your Portal URL and the setup token, then click **Connect with Portal SSO**.
+3. Sign in to Portal. A Portal **administrator** sees which address is asking and what it may do, chooses whether to allow password login and registration, then approves.
+4. Portal hands the client secret and API key straight to the Eggless server, which stores them AES-GCM encrypted (key in `~/.eggless/secrets/connection.key`, or `EGGLESS_SECRET_KEY`). Done.
+
+If the admin approves later, Eggless connects as soon as the approval redirects back. Reconnect and disconnect also live on /setup and need the setup token. Behind a proxy, set `EGGLESS_PUBLIC_URL` to the public address.
+
+### Manual setup: environment variables
+
+Environment variables still work and **take precedence**: if `PORTAL_CLIENT_SECRET` or `PORTAL_API_KEY` is set, /setup shows "managed by environment" and Connect is disabled.
 
 ```bash
 cp .env.example .env   # then fill in PORTAL_CLIENT_SECRET and PORTAL_API_KEY from the secret store
