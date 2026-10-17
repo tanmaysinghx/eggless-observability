@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -32,28 +32,28 @@ import { PortalConnectService, PortalConnectStatus } from '../../core/services/p
         <div *ngIf="outcome === 'denied' || outcome === 'error'" class="p-3 rounded-lg text-xs bg-rose-50 dark:bg-rose-950/25 border border-rose-200 dark:border-rose-800/40 text-rose-700 dark:text-rose-300">
           {{ outcomeMessage || 'The connection did not complete.' }}
         </div>
-        <div *ngIf="errorMessage" class="p-3 rounded-lg text-xs bg-rose-50 dark:bg-rose-950/25 border border-rose-200 dark:border-rose-800/40 text-rose-700 dark:text-rose-300">
-          {{ errorMessage }}
+        <div *ngIf="errorMessage()" class="p-3 rounded-lg text-xs bg-rose-50 dark:bg-rose-950/25 border border-rose-200 dark:border-rose-800/40 text-rose-700 dark:text-rose-300">
+          {{ errorMessage() }}
         </div>
 
-        <div *ngIf="!status" class="text-xs text-slate-400 text-center">Checking connection…</div>
+        <div *ngIf="!status()" class="text-xs text-slate-400 text-center">Checking connection…</div>
 
         <!-- Managed by environment -->
-        <div *ngIf="status?.mode === 'environment'" class="space-y-3 text-xs">
+        <div *ngIf="status()?.mode === 'environment'" class="space-y-3 text-xs">
           <div class="p-3 rounded-lg bg-slate-50 dark:bg-[#161e2c] border border-slate-200 dark:border-[#20293a]">
             Portal SSO is configured by environment variables (<span class="font-mono">PORTAL_*</span>) for
-            <span class="font-mono">{{ status?.portalUrl }}</span>. Remove <span class="font-mono">PORTAL_CLIENT_SECRET</span> and
+            <span class="font-mono">{{ status()?.portalUrl }}</span>. Remove <span class="font-mono">PORTAL_CLIENT_SECRET</span> and
             <span class="font-mono">PORTAL_API_KEY</span> to manage the connection here instead.
           </div>
           <a routerLink="/login" class="block w-full py-2.5 text-center bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold rounded-lg">Go to sign in</a>
         </div>
 
         <!-- Connected -->
-        <div *ngIf="status?.mode === 'connected'" class="space-y-3 text-xs">
+        <div *ngIf="status()?.mode === 'connected'" class="space-y-3 text-xs">
           <div class="p-3 rounded-lg bg-slate-50 dark:bg-[#161e2c] border border-slate-200 dark:border-[#20293a] space-y-1">
-            <div><span class="text-slate-500">Portal</span> <span class="font-mono float-right">{{ status?.portalUrl }}</span></div>
-            <div><span class="text-slate-500">Client ID</span> <span class="font-mono float-right">{{ status?.clientId }}</span></div>
-            <div><span class="text-slate-500">Connected</span> <span class="float-right">{{ status?.connectedAt | date: 'medium' }}</span></div>
+            <div><span class="text-slate-500">Portal</span> <span class="font-mono float-right">{{ status()?.portalUrl }}</span></div>
+            <div><span class="text-slate-500">Client ID</span> <span class="font-mono float-right">{{ status()?.clientId }}</span></div>
+            <div><span class="text-slate-500">Connected</span> <span class="float-right">{{ status()?.connectedAt | date: 'medium' }}</span></div>
           </div>
           <a routerLink="/login" class="block w-full py-2.5 text-center bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold rounded-lg">Go to sign in</a>
 
@@ -63,9 +63,9 @@ import { PortalConnectService, PortalConnectStatus } from '../../core/services/p
               <input [(ngModel)]="setupToken" name="setupTokenDisconnect" type="password" placeholder="Setup token"
                      class="w-full bg-slate-50 dark:bg-[#0b0e14] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] font-mono" />
               <div class="flex gap-2">
-                <button (click)="onReconnect()" [disabled]="loading || !setupToken"
+                <button (click)="onReconnect()" [disabled]="loading() || !setupToken"
                         class="flex-1 py-2 rounded-lg border border-slate-200 dark:border-[#20293a] font-semibold disabled:opacity-50">Reconnect</button>
-                <button (click)="onDisconnect()" [disabled]="loading || !setupToken"
+                <button (click)="onDisconnect()" [disabled]="loading() || !setupToken"
                         class="flex-1 py-2 rounded-lg border border-rose-200 dark:border-rose-800/40 text-rose-600 font-semibold disabled:opacity-50">Disconnect</button>
               </div>
               <p class="text-[11px] text-slate-400">Disconnecting forgets the credentials here. The app stays registered in Portal until an admin removes it.</p>
@@ -74,20 +74,20 @@ import { PortalConnectService, PortalConnectStatus } from '../../core/services/p
         </div>
 
         <!-- Waiting for approval -->
-        <div *ngIf="status?.mode === 'pending'" class="space-y-3 text-xs">
+        <div *ngIf="status()?.mode === 'pending'" class="space-y-3 text-xs">
           <div class="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-300">
             Waiting for a Portal administrator to approve. Send them the approval link; once they approve, Eggless connects automatically.
             If their browser cannot reach this Eggless, open the link yourself after approval and choose <b>Continue</b>.
           </div>
-          <a [href]="status?.pendingApprovalUrl" class="block w-full py-2.5 text-center bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold rounded-lg">Open approval page</a>
+          <a [href]="status()?.pendingApprovalUrl" class="block w-full py-2.5 text-center bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold rounded-lg">Open approval page</a>
           <button (click)="copyApprovalLink()" class="w-full py-2 rounded-lg border border-slate-200 dark:border-[#20293a] font-semibold">
-            {{ copied ? 'Copied ✓' : 'Copy approval link' }}
+            {{ copied() ? 'Copied ✓' : 'Copy approval link' }}
           </button>
           <button (click)="startOver()" class="w-full text-slate-500 hover:underline">Start over</button>
         </div>
 
         <!-- Not connected: the one form -->
-        <form *ngIf="status?.mode === 'not_connected'" (submit)="onConnect($event)" class="space-y-3.5 text-xs">
+        <form *ngIf="status()?.mode === 'not_connected'" (submit)="onConnect($event)" class="space-y-3.5 text-xs">
           <div>
             <label class="block text-slate-600 dark:text-[#94a3b8] font-medium mb-1">Portal SSO address</label>
             <input [(ngModel)]="portalUrl" name="portalUrl" type="url" required placeholder="https://sso.example.com"
@@ -98,13 +98,13 @@ import { PortalConnectService, PortalConnectStatus } from '../../core/services/p
             <input [(ngModel)]="setupToken" name="setupToken" type="password" required autocomplete="off"
                    class="w-full bg-slate-50 dark:bg-[#0b0e14] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] focus:outline-none focus:border-amber-500 font-mono" />
             <span class="text-[10px] text-slate-400 dark:text-[#64748b]">
-              Printed in the Eggless server log at startup, and stored in <span class="font-mono break-all">{{ status?.setupTokenFile }}</span>.
+              Printed in the Eggless server log at startup, and stored in <span class="font-mono break-all">{{ status()?.setupTokenFile }}</span>.
             </span>
           </div>
-          <button type="submit" [disabled]="loading"
+          <button type="submit" [disabled]="loading()"
                   class="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold rounded-lg flex items-center justify-center gap-2 disabled:opacity-50">
-            <span *ngIf="loading" class="animate-spin w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full"></span>
-            <span>{{ loading ? 'Contacting Portal…' : 'Connect with Portal SSO' }}</span>
+            <span *ngIf="loading()" class="animate-spin w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full"></span>
+            <span>{{ loading() ? 'Contacting Portal…' : 'Connect with Portal SSO' }}</span>
           </button>
           <p class="text-[11px] text-slate-400 dark:text-[#64748b]">
             You'll be taken to Portal to sign in. A Portal administrator approves which permissions Eggless gets.
@@ -118,12 +118,16 @@ export class SetupComponent implements OnInit {
   private connect = inject(PortalConnectService);
   private route = inject(ActivatedRoute);
 
-  status: PortalConnectStatus | null = null;
+  // Signals, not plain fields: the app is zoneless, so values set after an await only reach the
+  // view through a signal. Plain fields here left the page stuck on its header.
+  readonly status = signal<PortalConnectStatus | null>(null);
+  readonly loading = signal(false);
+  readonly copied = signal(false);
+  readonly errorMessage = signal<string | null>(null);
+
+  // Set synchronously or bound with ngModel, so plain fields are fine.
   portalUrl = '';
   setupToken = '';
-  loading = false;
-  copied = false;
-  errorMessage: string | null = null;
   outcome: string | null = null;
   outcomeMessage: string | null = null;
 
@@ -136,24 +140,25 @@ export class SetupComponent implements OnInit {
 
   async refresh() {
     try {
-      this.status = await this.connect.status();
-      if (this.status.portalUrl && !this.portalUrl) {
-        this.portalUrl = this.status.portalUrl;
+      const status = await this.connect.status();
+      if (status.portalUrl && !this.portalUrl) {
+        this.portalUrl = status.portalUrl;
       }
+      this.status.set(status);
     } catch {
-      this.errorMessage = 'Eggless server is unreachable.';
+      this.errorMessage.set('Eggless server is unreachable.');
     }
   }
 
   async onConnect(e?: Event) {
     e?.preventDefault();
-    this.loading = true;
-    this.errorMessage = null;
+    this.loading.set(true);
+    this.errorMessage.set(null);
     try {
       window.location.href = await this.connect.start(this.portalUrl.trim(), this.setupToken.trim());
     } catch (err: any) {
-      this.errorMessage = err.message;
-      this.loading = false;
+      this.errorMessage.set(err.message);
+      this.loading.set(false);
     }
   }
 
@@ -163,30 +168,29 @@ export class SetupComponent implements OnInit {
 
   /** Shows the connect form again; submitting replaces the pending request. */
   startOver() {
-    if (this.status) {
-      this.status = { ...this.status, mode: 'not_connected', pendingApprovalUrl: null };
-    }
+    this.status.update(s => (s ? { ...s, mode: 'not_connected', pendingApprovalUrl: null } : s));
   }
 
   async onDisconnect() {
-    this.loading = true;
-    this.errorMessage = null;
+    this.loading.set(true);
+    this.errorMessage.set(null);
     try {
       await this.connect.disconnect(this.setupToken.trim());
       this.setupToken = '';
       this.outcome = null;
       await this.refresh();
     } catch (err: any) {
-      this.errorMessage = err.message;
+      this.errorMessage.set(err.message);
     } finally {
-      this.loading = false;
+      this.loading.set(false);
     }
   }
 
   async copyApprovalLink() {
-    if (this.status?.pendingApprovalUrl) {
-      await navigator.clipboard.writeText(this.status.pendingApprovalUrl);
-      this.copied = true;
+    const url = this.status()?.pendingApprovalUrl;
+    if (url) {
+      await navigator.clipboard.writeText(url);
+      this.copied.set(true);
     }
   }
 }

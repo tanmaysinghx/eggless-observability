@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -35,17 +35,17 @@ import { SsoService } from '../../core/services/sso.service';
             <div>
               <div class="font-semibold text-slate-800 dark:text-[#f0f4f8]">Portal SSO Provider</div>
               <div class="text-[10px] text-slate-400 dark:text-[#64748b] font-mono truncate max-w-[190px]">
-                {{ portalConfig.baseUrl }}
+                {{ portalConfig().baseUrl }}
               </div>
             </div>
           </div>
 
           <span
             class="px-2 py-0.5 rounded text-[10px] font-mono font-semibold flex items-center gap-1.5"
-            [ngClass]="ssoOnline ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'bg-slate-100 dark:bg-[#1f293d] text-slate-500 dark:text-[#94a3b8]'"
+            [ngClass]="ssoOnline() ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'bg-slate-100 dark:bg-[#1f293d] text-slate-500 dark:text-[#94a3b8]'"
           >
-            <span class="w-1.5 h-1.5 rounded-full" [ngClass]="ssoOnline ? 'bg-emerald-500' : 'bg-slate-400'"></span>
-            {{ ssoOnline ? 'ONLINE' : 'ACTIVE' }}
+            <span class="w-1.5 h-1.5 rounded-full" [ngClass]="ssoOnline() ? 'bg-emerald-500' : 'bg-slate-400'"></span>
+            {{ ssoOnline() ? 'ONLINE' : 'ACTIVE' }}
           </span>
         </div>
 
@@ -218,7 +218,8 @@ export class LoginComponent implements OnInit {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
 
-  portalConfig = this.ssoService.getConfig();
+  // Signals: set after awaits, and the app is zoneless.
+  readonly portalConfig = signal(this.ssoService.getConfig());
   authMode: 'login' | 'register' = 'login';
 
   email = 'alex.rivera@tanmaysinghx.com';
@@ -228,7 +229,7 @@ export class LoginComponent implements OnInit {
 
   loading = false;
   errorMessage: string | null = null;
-  ssoOnline = false;
+  readonly ssoOnline = signal(false);
 
   private returnUrl = '/logs';
 
@@ -244,13 +245,13 @@ export class LoginComponent implements OnInit {
       this.router.navigate(['/setup']);
       return;
     }
-    this.portalConfig = this.ssoService.getConfig();
+    this.portalConfig.set(this.ssoService.getConfig());
     this.checkHealth();
   }
 
   async checkHealth() {
     const health = await this.ssoService.checkPortalSsoHealth();
-    this.ssoOnline = health.ok;
+    this.ssoOnline.set(health.ok);
   }
 
   async onPortalSsoInteractiveLogin() {
