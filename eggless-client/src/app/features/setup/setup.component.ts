@@ -60,7 +60,7 @@ import { PortalConnectService, PortalConnectStatus } from '../../core/services/p
           <details class="pt-2">
             <summary class="cursor-pointer text-slate-500">Reconnect or disconnect</summary>
             <div class="space-y-2 pt-3">
-              <input [(ngModel)]="setupToken" name="setupTokenDisconnect" type="password" placeholder="Setup token"
+              <input [(ngModel)]="setupToken" name="setupTokenDisconnect" type="text" autocomplete="off" spellcheck="false" placeholder="Setup token"
                      class="w-full bg-slate-50 dark:bg-[#0b0e14] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] font-mono" />
               <div class="flex gap-2">
                 <button (click)="onReconnect()" [disabled]="loading() || !setupToken"
@@ -95,7 +95,8 @@ import { PortalConnectService, PortalConnectStatus } from '../../core/services/p
           </div>
           <div>
             <label class="block text-slate-600 dark:text-[#94a3b8] font-medium mb-1">Setup token</label>
-            <input [(ngModel)]="setupToken" name="setupToken" type="password" required autocomplete="off"
+            <!-- type="text": browsers autofill saved passwords into password fields and ignore autocomplete="off". -->
+            <input [(ngModel)]="setupToken" name="setupToken" type="text" required autocomplete="off" spellcheck="false" autocapitalize="off"
                    class="w-full bg-slate-50 dark:bg-[#0b0e14] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] focus:outline-none focus:border-amber-500 font-mono" />
             <span class="text-[10px] text-slate-400 dark:text-[#64748b]">
               Printed in the Eggless server log at startup, and stored in <span class="font-mono break-all">{{ status()?.setupTokenFile }}</span>.

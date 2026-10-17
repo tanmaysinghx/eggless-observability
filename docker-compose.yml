@@ -23,7 +23,9 @@ services:
       PORTAL_LOGIN_ENDPOINT: "${PORTAL_LOGIN_ENDPOINT:-}"
       PORTAL_REGISTER_ENDPOINT: "${PORTAL_REGISTER_ENDPOINT:-}"
     volumes:
-      - eggless-data:/home/eggless/.eggless/data
+      # Whole home, not just data/: secrets/ holds the setup token and the key that decrypts the
+      # stored Portal credentials. Losing it on a container recreate breaks the connection.
+      - eggless-data:/home/eggless/.eggless
     restart: always
 
 volumes:

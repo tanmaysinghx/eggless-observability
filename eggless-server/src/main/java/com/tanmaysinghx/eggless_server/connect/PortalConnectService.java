@@ -314,8 +314,19 @@ public class PortalConnectService implements SmartInitializingSingleton {
 
     private void requireToken(String setupToken) {
         if (!setupTokens.matches(setupToken)) {
-            throw new ConnectException(403, "Setup token is incorrect. It is printed in the Eggless server log and stored in "
-                    + setupTokens.tokenFile() + ".");
+            // Naming the host matters when several instances (dev/qa, replicas) sit behind one address:
+            // each has its own token, and this says whose log or file to read.
+            throw new ConnectException(403, "Setup token is incorrect for this server (host " + hostName()
+                    + "). Read it from that instance: its startup log, or " + setupTokens.tokenFile() + ".");
+        }
+    }
+
+    /** In Docker this is the container ID, matching the NAMES/ID column of {@code docker ps}. */
+    private static String hostName() {
+        try {
+            return java.net.InetAddress.getLocalHost().getHostName();
+        } catch (java.net.UnknownHostException e) {
+            return "unknown";
         }
     }
 
