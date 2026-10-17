@@ -1,4 +1,7 @@
 spring:
+  # Load Portal SSO secrets from a git-ignored .env (repo root or eggless-server dir); real env vars still win.
+  config:
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
   application:
     name: eggless-observability
 
@@ -45,6 +48,8 @@ portal:
     client-secret: ${PORTAL_CLIENT_SECRET:}
     redirect-uri: ${PORTAL_REDIRECT_URI:https://eggless.tanmaysinghx.com/auth/callback}
     scopes: ${PORTAL_SCOPES:openid profile email}
+    login-endpoint: ${PORTAL_LOGIN_ENDPOINT:}
+    register-endpoint: ${PORTAL_REGISTER_ENDPOINT:}
 
 management:
   endpoints:

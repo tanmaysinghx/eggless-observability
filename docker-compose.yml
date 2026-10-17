@@ -19,6 +19,8 @@ services:
       # Secrets: set in .env (git-ignored) or your secret manager
       PORTAL_CLIENT_SECRET: "${PORTAL_CLIENT_SECRET:-}"
       PORTAL_API_KEY: "${PORTAL_API_KEY:-}"
+      PORTAL_LOGIN_ENDPOINT: "${PORTAL_LOGIN_ENDPOINT:-}"
+      PORTAL_REGISTER_ENDPOINT: "${PORTAL_REGISTER_ENDPOINT:-}"
     volumes:
       - eggless-data:/home/eggless/.eggless/data
     restart: always

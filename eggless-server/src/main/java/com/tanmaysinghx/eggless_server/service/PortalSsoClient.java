@@ -53,7 +53,7 @@ public class PortalSsoClient {
      * Authenticate user credentials against Portal SSO.
      */
     public PortalAuthResponse login(String email, String password) {
-        String url = String.format("/api/external/apps/%s/login", properties.getApplicationId());
+        String url = properties.getLoginUrl();
         log.info("Authenticating with Portal SSO at {} for {}", url, email);
 
         try {
@@ -86,7 +86,7 @@ public class PortalSsoClient {
      * Register a new user in Portal SSO under this application.
      */
     public PortalAuthResponse register(String email, String password, String firstName, String lastName) {
-        String url = String.format("/api/external/apps/%s/register", properties.getApplicationId());
+        String url = properties.getRegisterUrl();
         log.info("Registering user in Portal SSO at {} for {}", url, email);
 
         try {

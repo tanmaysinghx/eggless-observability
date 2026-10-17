@@ -1,13 +1,27 @@
-name: Eggless Platform CI/CD
+name: CI
+
+# Pipeline (jobs within a stage run in parallel):
+#
+#   1 · Build & test       backend tests · console build + unit tests · Java SDK build · secret scan
+#   2 · Static analysis    CodeQL (Java, TypeScript)
+#   3 · Package            Docker image build + smoke test
+#   4 · Gate               single required status check for branch protection
+#   5 · Release            tagged GitHub release (main pushes only)
+#
+# Every job has to prove something: a stage that cannot fail is decoration, not a gate.
+#
+# This file keeps its original name on purpose: release tags are v25.0.<run_number>, and run_number is
+# counted per workflow file, so renaming it would restart the count and collide with existing tags.
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
 
+# A new push to the same branch cancels the run still in flight — no value in finishing a build for
+# a commit that has already been superseded.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -15,80 +29,412 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  JAVA_VERSION: '25'
+  # The SDK is consumed by applications on older runtimes, so it is built with the JDK it targets.
+  SDK_JAVA_VERSION: '17'
+  # Node 24 to match the npm 11 that wrote package-lock.json (packageManager in package.json).
+  NODE_VERSION: '24'
+
 jobs:
-  build-frontend:
-    name: Build Angular Frontend
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
+  # Stage 1 · Build & test
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
+
+  backend:
+    name: "Stage 1 · Backend tests"
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: 'eggless-client/package-lock.json'
-
-      - name: Install Dependencies
-        working-directory: ./eggless-client
-        run: npm ci
-
-      - name: Build Angular App
-        working-directory: ./eggless-client
-        run: npm run build
-
-      - name: Upload Frontend Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: eggless-frontend-dist
-          path: ./eggless-client/dist/eggless-client/browser/
-
-  build-server:
-    name: Build Spring Boot Executable JAR
-    needs: build-frontend
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Java JDK 25
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
-          java-version: '25'
-          distribution: 'temurin'
-          cache: 'gradle'
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: gradle
 
-      - name: Download Frontend Artifact
-        uses: actions/download-artifact@v4
+      # The Gradle build copies eggless-client/dist into static resources (copyClientResources), so
+      # the console is built here too — otherwise the released jar would ship without its UI.
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
         with:
-          name: eggless-frontend-dist
-          path: ./eggless-server/src/main/resources/static/
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: eggless-client/package-lock.json
 
-      - name: Grant Execute Permission to Gradle Wrapper
-        working-directory: ./eggless-server
-        run: chmod +x gradlew
+      - name: Build console
+        working-directory: eggless-client
+        run: |
+          npm ci
+          npm run build
 
-      - name: Build & Test Executable JAR
-        working-directory: ./eggless-server
-        run: ./gradlew build
+      - name: Build and test
+        working-directory: eggless-server
+        run: |
+          chmod +x gradlew
+          ./gradlew build --console=plain
 
-      - name: Upload Standalone JAR Artifact
+      # A green build that ran no tests is worse than a red one, so the count is asserted rather
+      # than assumed.
+      - name: Assert tests actually ran
+        working-directory: eggless-server
+        run: |
+          reports=build/test-results/test
+          if [ ! -d "$reports" ]; then
+            echo "::error::No test reports — the test task did not run."
+            exit 1
+          fi
+          total=$(grep -ho '<testsuite[^>]* tests="[0-9]*"' $reports/TEST-*.xml \
+                  | grep -o 'tests="[0-9]*"' | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+          echo "Executed $total tests."
+          if [ "${total:-0}" -lt 7 ]; then
+            echo "::error::Only $total tests ran; expected at least 7. A suite that shrank silently is a defect."
+            exit 1
+          fi
+          for f in $reports/TEST-*.xml; do
+            if grep -q '<testsuite[^>]* tests="0"' "$f"; then
+              echo "::error::$(basename "$f") ran zero tests."
+              exit 1
+            fi
+          done
+
+      - name: Assert the jar embeds the console
+        working-directory: eggless-server
+        run: |
+          if ! unzip -l build/libs/eggless-observability.jar | grep -q 'BOOT-INF/classes/static/index.html'; then
+            echo "::error::eggless-observability.jar does not contain the Angular console."
+            exit 1
+          fi
+
+      - name: Test summary
+        if: always()
+        working-directory: eggless-server
+        run: |
+          reports=build/test-results/test
+          [ -d "$reports" ] || exit 0
+          sum() { grep -ho "<testsuite[^>]* $1=\"[0-9]*\"" $reports/TEST-*.xml \
+                  | grep -o "$1=\"[0-9]*\"" | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}'; }
+          tests=$(sum tests); failures=$(sum failures); errors=$(sum errors); skipped=$(sum skipped)
+          classes=$(ls $reports/TEST-*.xml | wc -l)
+          status="Passed"; [ $((failures + errors)) -gt 0 ] && status="Failed"
+          {
+            echo "### Backend tests — $status"
+            echo ""
+            echo "| Classes | Tests | Failures | Errors | Skipped |"
+            echo "|---:|---:|---:|---:|---:|"
+            echo "| $classes | $tests | $failures | $errors | $skipped |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-reports
+          path: eggless-server/build/test-results/test/
+          retention-days: 7
+
+      - name: Upload jar
         uses: actions/upload-artifact@v4
         with:
           name: eggless-observability-jar
-          path: ./eggless-server/build/libs/eggless-observability.jar
+          path: eggless-server/build/libs/eggless-observability.jar
+          retention-days: 7
+
+  frontend:
+    name: "Stage 1 · Console build & unit tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: eggless-client/package-lock.json
+
+      # `npm ci` fails outright if package.json and package-lock.json disagree, so this doubles as
+      # the check that the lock file is complete for Linux.
+      - name: Install
+        working-directory: eggless-client
+        run: npm ci
+
+      - name: Unit tests
+        working-directory: eggless-client
+        run: npx ng test --watch=false
+
+      # Production configuration: AOT, hashed output, and the bundle budgets in angular.json.
+      - name: Production build
+        working-directory: eggless-client
+        run: npx ng build
+
+      # Portal SSO rule: the client secret and app API key are server-side only.
+      - name: Assert no Portal secrets in the bundle
+        working-directory: eggless-client
+        run: |
+          if grep -rEl 'psso_app_[A-Za-z0-9_-]{20,}|client_secret=' dist/; then
+            echo "::error::A Portal SSO secret pattern was found in the browser bundle."
+            exit 1
+          fi
+          echo "No Portal SSO secrets in dist/."
+
+      - name: Bundle summary
+        working-directory: eggless-client
+        run: |
+          {
+            echo "### Console bundle"
+            echo ""
+            echo "| Output | Size |"
+            echo "|---|---:|"
+            echo "| Total | $(du -sh dist/eggless-client | cut -f1) |"
+            echo "| JavaScript | $(find dist/eggless-client -name '*.js' -print0 | du -ch --files0-from=- | tail -1 | cut -f1) |"
+            echo "| CSS | $(find dist/eggless-client -name '*.css' -print0 | du -ch --files0-from=- | tail -1 | cut -f1) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  sdk:
+    name: "Stage 1 · Java SDK build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.SDK_JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.SDK_JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Build and test
+        working-directory: eggless-sdk-java
+        run: mvn -B verify
+
+      - name: Verify module jars
+        working-directory: eggless-sdk-java
+        run: |
+          {
+            echo "### Java SDK"
+            echo ""
+            echo "| Module | Jar |"
+            echo "|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for m in eggless-java-core eggless-logback-appender eggless-spring-boot-starter; do
+            jar=$(ls $m/target/*.jar 2>/dev/null | grep -v -- '-sources\|-javadoc' | head -1)
+            if [ -z "$jar" ]; then
+              echo "::error::$m produced no jar."
+              exit 1
+            fi
+            echo "| $m | $(basename "$jar") ($(du -h "$jar" | cut -f1)) |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eggless-java-sdk-jars
+          path: |
+            eggless-sdk-java/eggless-java-core/target/*.jar
+            eggless-sdk-java/eggless-logback-appender/target/*.jar
+            eggless-sdk-java/eggless-spring-boot-starter/target/*.jar
+          retention-days: 7
+
+  # Portal SSO credentials were once committed to this repository. This makes a repeat a red build
+  # instead of a rotation exercise.
+  secrets:
+    name: "Stage 1 · Secret scan"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No committed .env files
+        run: |
+          tracked=$(git ls-files | grep -E '(^|/)\.env(\..+)?$' | grep -v '\.env\.example$' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::.env files must never be committed: $tracked"
+            exit 1
+          fi
+
+      - name: No Portal SSO secrets in source
+        run: |
+          found=0
+          if git grep -nE 'psso_app_[A-Za-z0-9_-]{20,}'; then
+            echo "::error::A Portal SSO app API key is committed. Rotate it in Portal SSO and read it from PORTAL_API_KEY."
+            found=1
+          fi
+          if git grep -nEi '(PORTAL_CLIENT_SECRET|client-?secret)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_-]{20,}'; then
+            echo "::error::A Portal SSO client secret is committed. Rotate it in Portal SSO and read it from PORTAL_CLIENT_SECRET."
+            found=1
+          fi
+          exit $found
+
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
+  # Stage 2 · Static analysis
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
+
+  codeql:
+    name: "Stage 2 · CodeQL (${{ matrix.language }})"
+    runs-on: ubuntu-latest
+    # Code scanning on private repositories requires GitHub Advanced Security.
+    if: ${{ !github.event.repository.private }}
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [java-kotlin, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+
+      # build-mode none: analyses source directly, so this does not repeat the Gradle + Angular
+      # build already proven in Stage 1.
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
+  # Stage 3 · Package
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
+
+  image:
+    name: "Stage 3 · Docker image & smoke test"
+    runs-on: ubuntu-latest
+    # No point proving the image builds if the code is broken or a gate failed.
+    needs: [backend, frontend, sdk, secrets]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Built but not pushed: there is no registry configured yet. The value here is catching a
+      # Dockerfile that stopped building, which is otherwise only discovered at deploy time.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: eggless-observability:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Building proves it compiles; this proves it runs, serves the console, and keeps Portal SSO
+      # secrets on the server.
+      - name: Smoke test the image
+        run: |
+          docker run -d --name ci-app -p 8080:8080 \
+            -e PORTAL_CLIENT_SECRET=ci-fake-secret \
+            -e PORTAL_API_KEY=psso_app_ci-fake \
+            eggless-observability:ci
+
+          started=$(date +%s)
+          for i in $(seq 1 40); do
+            curl -fsS http://localhost:8080/actuator/health 2>/dev/null | grep -q '"status":"UP"' && break
+            if [ "$(docker inspect -f '{{.State.Status}}' ci-app)" = "exited" ]; then
+              echo "::error::Container exited during startup."
+              docker logs ci-app
+              exit 1
+            fi
+            sleep 3
+          done
+          boot_seconds=$(( $(date +%s) - started ))
+
+          if ! curl -fsS http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+            echo "::error::Container never became healthy."
+            docker logs ci-app
+            exit 1
+          fi
+
+          # The SPA is embedded and client-side routes fall through to index.html.
+          curl -fsS http://localhost:8080/ | grep -q '<app-root' \
+            || { echo "::error::Console index.html was not served."; exit 1; }
+          curl -fsS http://localhost:8080/auth/callback | grep -q '<app-root' \
+            || { echo "::error::/auth/callback did not fall through to the console."; exit 1; }
+
+          # Public SSO config is served with the exact registered redirect URI and no secrets.
+          config=$(curl -fsS http://localhost:8080/api/auth/config)
+          echo "SSO config: $config"
+          echo "$config" | grep -q '"clientId":"eggless-observability"' \
+            || { echo "::error::/api/auth/config did not return the Portal client ID."; exit 1; }
+          echo "$config" | grep -q '"redirectUri":"https://eggless.tanmaysinghx.com/auth/callback"' \
+            || { echo "::error::/api/auth/config did not return the registered redirect URI."; exit 1; }
+          if echo "$config" | grep -qE 'ci-fake-secret|psso_app_ci-fake'; then
+            echo "::error::/api/auth/config leaked a Portal SSO secret."
+            exit 1
+          fi
+          if docker logs ci-app 2>&1 | grep -qE 'ci-fake-secret|psso_app_ci-fake'; then
+            echo "::error::A Portal SSO secret was written to the application log."
+            exit 1
+          fi
+
+          size=$(docker image inspect eggless-observability:ci --format '{{.Size}}' | awk '{printf "%.0f MB", $1/1024/1024}')
+          {
+            echo "### Docker image"
+            echo ""
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| Image size | $size |"
+            echo "| Healthy after | ${boot_seconds}s |"
+            echo "| Console served | yes |"
+            echo "| SSO config | registered redirect URI, no secrets |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs ci-app || true
+
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
+  # Stage 4 · Gate
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
+
+  # The one status check to mark as required in branch protection. It passes only if every job
+  # above succeeded or was legitimately skipped (CodeQL on a private repo), so adding a job never
+  # means editing protection rules.
+  ci-status:
+    name: "Stage 4 · All checks passed"
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [backend, frontend, sdk, secrets, codeql, image]
+    steps:
+      - name: Evaluate results
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "### Pipeline result" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Job | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          failed=0
+          for job in $(echo "$RESULTS" | jq -r 'keys[]'); do
+            result=$(echo "$RESULTS" | jq -r --arg j "$job" '.[$j].result')
+            case "$result" in
+              success|skipped) ;;
+              *) failed=1 ;;
+            esac
+            echo "| $job | $result |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          if [ "$failed" = "1" ]; then
+            echo "::error::One or more pipeline jobs failed or were cancelled."
+            exit 1
+          fi
+
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
+  # Stage 5 · Release
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
 
   release:
-    name: Auto Release & Tag
+    name: "Stage 5 · Release"
     runs-on: ubuntu-latest
-    needs: [build-frontend, build-server]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [ci-status]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.ci-status.result == 'success'
     permissions:
       contents: write
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Download compiled JAR
         uses: actions/download-artifact@v4
@@ -96,7 +442,7 @@ jobs:
           name: eggless-observability-jar
           path: dist/
 
-      - name: Prepare Release Artifacts
+      - name: Prepare release artifacts
         id: prep
         run: |
           JAR_FILE=$(find dist -name "*.jar" ! -name "*.original" | head -n 1)
@@ -104,9 +450,14 @@ jobs:
           sha256sum eggless-observability.jar > eggless-observability.jar.sha256
           TAG="v25.0.${{ github.run_number }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Prepared release for tag: $TAG"
+          {
+            echo "### Release $TAG"
+            echo '```'
+            cat eggless-observability.jar.sha256
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Create GitHub Release and Git Tag
+      - name: Create GitHub release and tag
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.prep.outputs.tag }}
@@ -119,28 +470,27 @@ jobs:
             eggless-observability.jar
             eggless-observability.jar.sha256
           body: |
-            ## Eggless Observability Standalone Executable (Single Runnable JAR)
+            ## Eggless Observability — standalone executable
 
-            ### Direct Download
-            - **[eggless-observability.jar](https://github.com/${{ github.repository }}/releases/download/${{ steps.prep.outputs.tag }}/eggless-observability.jar)** (Standalone Fat JAR with embedded Angular 21 Console)
+            ### Download
+            - **[eggless-observability.jar](https://github.com/${{ github.repository }}/releases/download/${{ steps.prep.outputs.tag }}/eggless-observability.jar)** — single jar with the embedded Angular console
             - **[eggless-observability.jar.sha256](https://github.com/${{ github.repository }}/releases/download/${{ steps.prep.outputs.tag }}/eggless-observability.jar.sha256)**
 
-            ### Quick Start (Java 25+)
+            ### Quick start (Java 25+)
             ```bash
-            # 1. Download
             curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.prep.outputs.tag }}/eggless-observability.jar
-
-            # 2. Run with Embedded Persistent H2 (Zero Setup)
+            sha256sum -c <(curl -sL https://github.com/${{ github.repository }}/releases/download/${{ steps.prep.outputs.tag }}/eggless-observability.jar.sha256)
             java -jar eggless-observability.jar
             ```
 
-            Open **http://localhost:8080** in your browser.
+            Open **http://localhost:8080**. Data is stored in an embedded H2 database under `~/.eggless`.
 
-            ### Custom Database (PostgreSQL / MySQL)
+            ### Portal SSO
+            Put the Portal SSO settings in a `.env` next to the jar (see `.env.example`) or export them:
+            `PORTAL_URL`, `PORTAL_CLIENT_ID`, `PORTAL_REDIRECT_URI`, `PORTAL_SCOPES`, `PORTAL_CLIENT_SECRET`, `PORTAL_API_KEY`.
+
+            ### Custom database (PostgreSQL / MySQL)
             ```bash
-            # Shift to PostgreSQL
             DB_URL=jdbc:postgresql://localhost:5432/eggless DB_USERNAME=postgres DB_PASSWORD=secret java -jar eggless-observability.jar
-
-            # Shift to MySQL
             DB_URL=jdbc:mysql://localhost:3306/eggless DB_USERNAME=root DB_PASSWORD=secret java -jar eggless-observability.jar
             ```

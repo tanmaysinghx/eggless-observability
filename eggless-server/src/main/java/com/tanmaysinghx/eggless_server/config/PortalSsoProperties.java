@@ -47,6 +47,30 @@ public class PortalSsoProperties {
      */
     private String scopes = "openid profile email";
 
+    /**
+     * External Auth API login endpoint (PORTAL_LOGIN_ENDPOINT). Defaults to the URL derived from applicationId.
+     */
+    private String loginEndpoint = "";
+
+    /**
+     * External Auth API register endpoint (PORTAL_REGISTER_ENDPOINT). Defaults to the URL derived from applicationId.
+     */
+    private String registerEndpoint = "";
+
+    public String getLoginUrl() {
+        return isSet(loginEndpoint) ? loginEndpoint
+                : getNormalizedBaseUrl() + "/api/external/apps/" + applicationId + "/login";
+    }
+
+    public String getRegisterUrl() {
+        return isSet(registerEndpoint) ? registerEndpoint
+                : getNormalizedBaseUrl() + "/api/external/apps/" + applicationId + "/register";
+    }
+
+    private static boolean isSet(String value) {
+        return value != null && !value.isBlank();
+    }
+
     public String getNormalizedBaseUrl() {
         return baseUrl != null ? baseUrl.replaceAll("/+$", "") : "";
     }
