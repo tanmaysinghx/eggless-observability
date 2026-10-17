@@ -31,7 +31,7 @@ public class PortalSsoProperties {
     /**
      * Optional OAuth 2.1 Client Secret if the client was registered as Confidential.
      */
-    private String clientSecret = "";
+    private String clientSecret = "QjW5D-roZKxXXd9aNsdNrLT2TRkcj4JYy6BGS2ZvLl0";
 
     /**
      * Allowed redirect URI for OIDC PKCE callbacks.

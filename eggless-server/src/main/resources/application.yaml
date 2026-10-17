@@ -41,7 +41,7 @@ portal:
     application-id: ${PORTAL_APP_ID:5de93ba7-0673-4fba-8e9b-a1bdb8466f03}
     app-key: ${PORTAL_APP_KEY:psso_app__qQ9WXrurQ0WdDpYZ3OhbxKhrJuSpLhS6cUdsHUZYiA}
     client-id: ${PORTAL_CLIENT_ID:eggless-observability}
-    client-secret: ${PORTAL_CLIENT_SECRET:}
+    client-secret: ${PORTAL_CLIENT_SECRET:QjW5D-roZKxXXd9aNsdNrLT2TRkcj4JYy6BGS2ZvLl0}
     redirect-uri: ${PORTAL_REDIRECT_URI:https://eggless.tanmaysinghx.com/auth/callback}
 
 management:
