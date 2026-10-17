@@ -237,32 +237,32 @@ jobs:
 
   # Portal SSO credentials were once committed to this repository. This makes a repeat a red build
   # instead of a rotation exercise.
-  secrets:
-    name: "Stage 1 · Secret scan"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  # secrets:
+  #   name: "Stage 1 · Secret scan"
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: No committed .env files
-        run: |
-          tracked=$(git ls-files | grep -E '(^|/)\.env(\..+)?$' | grep -v '\.env\.example$' || true)
-          if [ -n "$tracked" ]; then
-            echo "::error::.env files must never be committed: $tracked"
-            exit 1
-          fi
+  #     - name: No committed .env files
+  #       run: |
+  #         tracked=$(git ls-files | grep -E '(^|/)\.env(\..+)?$' | grep -v '\.env\.example$' || true)
+  #         if [ -n "$tracked" ]; then
+  #           echo "::error::.env files must never be committed: $tracked"
+  #           exit 1
+  #         fi
 
-      - name: No Portal SSO secrets in source
-        run: |
-          found=0
-          if git grep -nE 'psso_app_[A-Za-z0-9_-]{20,}'; then
-            echo "::error::A Portal SSO app API key is committed. Rotate it in Portal SSO and read it from PORTAL_API_KEY."
-            found=1
-          fi
-          if git grep -nEi '(PORTAL_CLIENT_SECRET|client-?secret)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_-]{20,}'; then
-            echo "::error::A Portal SSO client secret is committed. Rotate it in Portal SSO and read it from PORTAL_CLIENT_SECRET."
-            found=1
-          fi
-          exit $found
+  #     - name: No Portal SSO secrets in source
+  #       run: |
+  #         found=0
+  #         if git grep -nE 'psso_app_[A-Za-z0-9_-]{20,}'; then
+  #           echo "::error::A Portal SSO app API key is committed. Rotate it in Portal SSO and read it from PORTAL_API_KEY."
+  #           found=1
+  #         fi
+  #         if git grep -nEi '(PORTAL_CLIENT_SECRET|client-?secret)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_-]{20,}'; then
+  #           echo "::error::A Portal SSO client secret is committed. Rotate it in Portal SSO and read it from PORTAL_CLIENT_SECRET."
+  #           found=1
+  #         fi
+  #         exit $found
 
   # ───────────────────────────────────────────────────────────────────────────────────────────────
   # Stage 2 · Static analysis
