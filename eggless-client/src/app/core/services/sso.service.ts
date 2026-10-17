@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
+import { PortalSSO, PortalUser as SsoSdkUser } from '@tanmaysinghx/portal-sso';
 
 export interface PortalUser {
   id: string;
@@ -144,6 +145,92 @@ export class SsoService {
   // ==========================================
   // 1. OAUTH 2.1 / OIDC PKCE BROWSER FLOW
   // ==========================================
+
+  /**
+   * Seamless Okta-style popup login window with zero page-reloads.
+   * Powered by @tanmaysinghx/portal-sso SDK.
+   */
+  public async loginWithPopup(): Promise<SsoUser> {
+    const portalUrl = this.config.baseUrl.replace(/\/+$/, '');
+    const ssoClient = new PortalSSO({
+      portalUrl: portalUrl,
+      clientId: this.config.clientId,
+      redirectUri: 'https://portal.tanmaysinghx.com/oauth2/popup-callback'
+    });
+
+    // Intercept token exchange to route through backend proxy (/api/auth/exchange)
+    // with client_secret, completely immune to browser CORS restrictions
+    (ssoClient as any).exchangeCodeForTokens = async (code: string, codeVerifier: string, redirectUri: string) => {
+      let tokenData: any;
+      try {
+        tokenData = await firstValueFrom(
+          this.http.post<any>(`${this.backendAuthUrl}/exchange`, {
+            code,
+            codeVerifier,
+            redirectUri
+          })
+        );
+      } catch {
+        // Direct browser fallback
+        const tokenEndpoint = `${portalUrl}/oauth2/token`;
+        const body = new URLSearchParams();
+        body.append('grant_type', 'authorization_code');
+        body.append('client_id', this.config.clientId);
+        body.append('code', code);
+        body.append('code_verifier', codeVerifier);
+        body.append('redirect_uri', redirectUri);
+        const res = await fetch(tokenEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString()
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error_description || err.error || 'Failed to exchange authorization code');
+        }
+        tokenData = await res.json();
+      }
+
+      const idClaims = tokenData.id_token ? this.parseJwt(tokenData.id_token) : {};
+      const accessClaims = tokenData.access_token ? this.parseJwt(tokenData.access_token) : {};
+      const user: SsoSdkUser = {
+        id: idClaims.sub || accessClaims.sub || '',
+        email: idClaims.email || accessClaims.email || '',
+        name: idClaims.name || idClaims.preferred_username || idClaims.email || 'User',
+        roles: idClaims.roles || accessClaims.roles || ['ROLE_USER'],
+        rawClaims: idClaims
+      };
+
+      const expiresAt = Date.now() + (tokenData.expires_in ? tokenData.expires_in * 1000 : 3600 * 1000);
+      return {
+        user,
+        accessToken: tokenData.access_token || '',
+        idToken: tokenData.id_token || '',
+        refreshToken: tokenData.refresh_token,
+        expiresIn: tokenData.expires_in,
+        expiresAt
+      };
+    };
+
+    const session = await ssoClient.loginWithPopup();
+    const ssoUser: SsoUser = {
+      id: session.user.id,
+      name: session.user.name || session.user.email,
+      email: session.user.email,
+      role: session.user.roles?.[0] || 'ROLE_USER',
+      roles: session.user.roles || ['ROLE_USER'],
+      tenant: new URL(this.config.baseUrl).hostname,
+      avatar: this.getInitials(session.user.name || session.user.email),
+      ssoProvider: 'Portal SSO (Popup OAuth 2.1)',
+      idToken: session.idToken,
+      accessToken: session.accessToken,
+      expiresAt: new Date(session.expiresAt).toISOString(),
+      claims: session.user.rawClaims
+    };
+
+    this.saveUserSession(ssoUser);
+    return ssoUser;
+  }
 
   public async initiatePortalSsoLogin(): Promise<void> {
     const verifier = this.generateRandomString(64);

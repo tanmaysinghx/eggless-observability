@@ -59,11 +59,11 @@ import { SsoService } from '../../core/services/sso.service';
             <svg class="w-4 h-4 text-slate-950 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
             </svg>
-            <span>Sign In with Portal SSO (OIDC PKCE)</span>
+            <span>Sign In with Portal SSO (Popup Login)</span>
           </button>
 
           <p class="text-[11px] text-slate-400 dark:text-[#64748b] text-center">
-            Standard OAuth 2.1 protocol with S256 code challenge
+            Seamless popup authentication powered by &#64;tanmaysinghx/portal-sso
           </p>
         </div>
 
@@ -251,10 +251,11 @@ export class LoginComponent implements OnInit {
     this.loading = true;
     this.errorMessage = null;
     try {
-      await this.ssoService.initiatePortalSsoLogin();
+      await this.ssoService.loginWithPopup();
+      this.router.navigateByUrl(this.returnUrl);
     } catch (err: any) {
       this.loading = false;
-      this.errorMessage = err.message || 'Failed to initialize Portal SSO redirection.';
+      this.errorMessage = err.message || 'Failed to authenticate via Portal SSO popup.';
     }
   }
 
