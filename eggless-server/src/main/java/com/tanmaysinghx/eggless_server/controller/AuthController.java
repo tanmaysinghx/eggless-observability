@@ -67,4 +67,26 @@ public class AuthController {
         }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
+
+    /**
+     * Proxies OAuth 2.1 authorization code exchange to Portal SSO server-side.
+     * Avoids browser CORS and mixed content issues.
+     */
+    @PostMapping("/exchange")
+    public ResponseEntity<?> exchangeCode(@RequestBody Map<String, String> body) {
+        String code = body != null ? body.get("code") : null;
+        String codeVerifier = body != null ? body.get("codeVerifier") : null;
+        String redirectUri = body != null ? body.get("redirectUri") : null;
+
+        if (code == null || codeVerifier == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "code and codeVerifier are required"));
+        }
+
+        try {
+            Map<String, Object> tokenData = portalSsoClient.exchangeToken(code, codeVerifier, redirectUri);
+            return ResponseEntity.ok(tokenData);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        }
+    }
 }

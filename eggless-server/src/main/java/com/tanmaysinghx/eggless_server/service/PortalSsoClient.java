@@ -9,13 +9,16 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
 
 /**
- * Client service implementing the Portal SSO External Auth API.
- * Handles programmatic auto-login, machine/agent auth, and headless user registration.
+ * Client service implementing the Portal SSO External Auth API and OAuth 2.1 token exchange.
+ * Handles programmatic auto-login, machine/agent auth, headless user registration,
+ * and server-side OAuth2 authorization code exchange (avoiding browser CORS).
  */
 @Slf4j
 @Service
@@ -81,6 +84,54 @@ public class PortalSsoClient {
                     .error("REGISTRATION_FAILED")
                     .message(e.getMessage() != null ? e.getMessage() : "Portal SSO registration failed")
                     .build();
+        }
+    }
+
+    /**
+     * Server-side OAuth 2.1 authorization code exchange with Portal SSO.
+     * Keeps token exchange reliable and avoids browser CORS restrictions.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> exchangeToken(String code, String codeVerifier, String redirectUri) {
+        String base = properties.getBaseUrl() != null ? properties.getBaseUrl().replaceAll("/+$", "") : "https://portal.tanmaysinghx.com";
+        String tokenUrl = base + "/oauth2/token";
+        String uriToUse = (redirectUri != null && !redirectUri.isBlank()) ? redirectUri : properties.getRedirectUri();
+        log.info("Exchanging OAuth code with Portal SSO at {} (redirect_uri: {})", tokenUrl, uriToUse);
+
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "authorization_code");
+        form.add("client_id", properties.getClientId());
+        form.add("code", code);
+        form.add("redirect_uri", uriToUse);
+        form.add("code_verifier", codeVerifier);
+
+        try {
+            Map<String, Object> tokenResponse = restClient.post()
+                    .uri(tokenUrl)
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(form)
+                    .retrieve()
+                    .body(Map.class);
+
+            if (tokenResponse != null && tokenResponse.containsKey("access_token")) {
+                String accessToken = (String) tokenResponse.get("access_token");
+                try {
+                    Map<String, Object> userinfo = restClient.get()
+                            .uri(base + "/userinfo")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                            .retrieve()
+                            .body(Map.class);
+                    if (userinfo != null) {
+                        tokenResponse.put("userinfo", userinfo);
+                    }
+                } catch (Exception e) {
+                    log.warn("Could not retrieve userinfo from Portal SSO: {}", e.getMessage());
+                }
+            }
+            return tokenResponse;
+        } catch (Exception e) {
+            log.error("Portal SSO OAuth token exchange error: {}", e.getMessage());
+            throw new RuntimeException("Token exchange failed with Portal SSO: " + e.getMessage());
         }
     }
 

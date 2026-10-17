@@ -51,7 +51,7 @@ const DEFAULT_PORTAL_CONFIG: PortalSsoConfig = {
   baseUrl: 'https://portal.tanmaysinghx.com',
   applicationId: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
   clientId: 'eggless-observability',
-  redirectUri: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : 'http://localhost:4200/auth/callback'
+  redirectUri: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : 'https://eggless.tanmaysinghx.com/auth/callback'
 };
 
 @Injectable({
@@ -59,7 +59,13 @@ const DEFAULT_PORTAL_CONFIG: PortalSsoConfig = {
 })
 export class SsoService {
   private http = inject(HttpClient);
-  private backendAuthUrl = 'http://localhost:8080/api/auth';
+
+  private get backendAuthUrl(): string {
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}/api/auth`;
+    }
+    return '/api/auth';
+  }
 
   private config: PortalSsoConfig = this.loadConfig();
 
@@ -91,7 +97,11 @@ export class SsoService {
     try {
       const saved = localStorage.getItem('eggless_portal_config');
       if (saved) {
-        return { ...DEFAULT_PORTAL_CONFIG, ...JSON.parse(saved) };
+        const parsed = JSON.parse(saved);
+        // Discard legacy localhost configs when running on real domains
+        if (parsed.baseUrl && !parsed.baseUrl.includes('localhost')) {
+          return { ...DEFAULT_PORTAL_CONFIG, ...parsed };
+        }
       }
     } catch (e) {
       // Fallback
@@ -109,7 +119,7 @@ export class SsoService {
         localStorage.setItem('eggless_portal_config', JSON.stringify(this.config));
       }
     } catch {
-      // Backend not running yet; use client defaults
+      // Backend unreachable or offline; fallback to default
     }
   }
 
@@ -118,7 +128,6 @@ export class SsoService {
     if (savedUser) {
       try {
         const parsed: SsoUser = JSON.parse(savedUser);
-        // Verify expiration
         if (parsed.expiresAt && new Date(parsed.expiresAt) < new Date()) {
           this.logout();
         } else {
@@ -143,7 +152,7 @@ export class SsoService {
     sessionStorage.setItem('portal_pkce_verifier', verifier);
     sessionStorage.setItem('portal_auth_state', state);
 
-    const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : this.config.redirectUri;
+    const redirectUri = `${window.location.origin}/auth/callback`;
     const authUrl = new URL(`${this.config.baseUrl.replace(/\/+$/, '')}/oauth2/authorize`);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('client_id', this.config.clientId);
@@ -161,7 +170,7 @@ export class SsoService {
     const verifier = sessionStorage.getItem('portal_pkce_verifier');
 
     if (!savedState || savedState !== state) {
-      throw new Error('OAuth state validation failed: possible CSRF attempt.');
+      throw new Error('OAuth state validation failed: possible CSRF attempt or session expired.');
     }
 
     if (!verifier) {
@@ -172,36 +181,46 @@ export class SsoService {
     sessionStorage.removeItem('portal_pkce_verifier');
 
     const redirectUri = `${window.location.origin}/auth/callback`;
-    const tokenUrl = `${this.config.baseUrl.replace(/\/+$/, '')}/oauth2/token`;
+    let tokenData: any;
 
-    const body = new URLSearchParams();
-    body.set('grant_type', 'authorization_code');
-    body.set('client_id', this.config.clientId);
-    body.set('code', code);
-    body.set('redirect_uri', redirectUri);
-    body.set('code_verifier', verifier);
+    // 1. Primary: Server-side token exchange (avoids browser CORS)
+    try {
+      tokenData = await firstValueFrom(
+        this.http.post<any>(`${this.backendAuthUrl}/exchange`, {
+          code: code,
+          codeVerifier: verifier,
+          redirectUri: redirectUri
+        })
+      );
+    } catch (backendErr: any) {
+      // 2. Fallback: Direct browser fetch
+      const tokenUrl = `${this.config.baseUrl.replace(/\/+$/, '')}/oauth2/token`;
+      const body = new URLSearchParams();
+      body.set('grant_type', 'authorization_code');
+      body.set('client_id', this.config.clientId);
+      body.set('code', code);
+      body.set('redirect_uri', redirectUri);
+      body.set('code_verifier', verifier);
 
-    const res = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: body.toString()
-    });
+      const res = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error_description || err.error || `Token exchange failed with status ${res.status}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error_description || err.error || backendErr?.error?.error || `Token exchange failed: ${res.status}`);
+      }
+      tokenData = await res.json();
     }
 
-    const tokenData = await res.json();
     const idToken = tokenData.id_token;
     const accessToken = tokenData.access_token;
     const claims = idToken ? this.parseJwt(idToken) : {};
+    let profileData: any = tokenData.userinfo || {};
 
-    // Retrieve userinfo profile if available
-    let profileData: any = {};
-    if (accessToken) {
+    if (!profileData.email && accessToken) {
       try {
         const userinfoRes = await fetch(`${this.config.baseUrl.replace(/\/+$/, '')}/userinfo`, {
           headers: { Authorization: `Bearer ${accessToken}` }
@@ -227,7 +246,7 @@ export class SsoService {
       email: email,
       role: roles.includes('ROLE_ADMIN') ? 'Administrator (ROLE_ADMIN)' : 'Observability Engineer',
       roles: roles,
-      tenant: 'tanmaysinghx.portal',
+      tenant: 'portal.tanmaysinghx.com',
       avatar: this.getInitials(name),
       ssoProvider: 'Portal SSO (OAuth 2.1 / OIDC PKCE)',
       idToken: idToken,
@@ -245,7 +264,6 @@ export class SsoService {
   // ==========================================
 
   public async loginWithCredentials(email: string, pass: string): Promise<SsoUser> {
-    // Attempt backend proxy first (which securely injects X-Portal-App-Key)
     try {
       const resp = await firstValueFrom(
         this.http.post<PortalAuthResponse>(`${this.backendAuthUrl}/login`, {
@@ -259,7 +277,6 @@ export class SsoService {
       }
       throw new Error(resp?.message || 'Invalid credentials in Portal SSO');
     } catch (err: any) {
-      // If backend is not available, check if direct client call is possible
       if (err.status === 0 || err.status === 404 || err.status === 503) {
         return this.directExternalLogin(email, pass);
       }
@@ -293,7 +310,6 @@ export class SsoService {
   }
 
   private async directExternalLogin(email: string, pass: string): Promise<SsoUser> {
-    // Direct REST call fallback
     const url = `${this.config.baseUrl.replace(/\/+$/, '')}/api/external/apps/${this.config.applicationId}/login`;
     const res = await fetch(url, {
       method: 'POST',
