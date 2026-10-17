@@ -35,14 +35,16 @@ server:
     min-response-size: 1024
 
 # Portal SSO Integration Configuration
+# Secrets (PORTAL_CLIENT_SECRET, PORTAL_API_KEY) have no defaults: supply them via env / secret store.
 portal:
   sso:
-    base-url: ${PORTAL_BASE_URL:https://portal.tanmaysinghx.com}
+    base-url: ${PORTAL_URL:https://portal.tanmaysinghx.com}
     application-id: ${PORTAL_APP_ID:5de93ba7-0673-4fba-8e9b-a1bdb8466f03}
-    app-key: ${PORTAL_APP_KEY:psso_app__qQ9WXrurQ0WdDpYZ3OhbxKhrJuSpLhS6cUdsHUZYiA}
+    app-key: ${PORTAL_API_KEY:}
     client-id: ${PORTAL_CLIENT_ID:eggless-observability}
-    client-secret: ${PORTAL_CLIENT_SECRET:QjW5D-roZKxXXd9aNsdNrLT2TRkcj4JYy6BGS2ZvLl0}
+    client-secret: ${PORTAL_CLIENT_SECRET:}
     redirect-uri: ${PORTAL_REDIRECT_URI:https://eggless.tanmaysinghx.com/auth/callback}
+    scopes: ${PORTAL_SCOPES:openid profile email}
 
 management:
   endpoints:

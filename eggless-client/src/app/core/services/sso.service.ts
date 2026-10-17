@@ -46,13 +46,16 @@ export interface PortalSsoConfig {
   applicationId: string;
   clientId: string;
   redirectUri: string;
+  scopes: string;
 }
 
+// Fallbacks only; the backend's /api/auth/config (driven by PORTAL_* env vars) is authoritative.
 const DEFAULT_PORTAL_CONFIG: PortalSsoConfig = {
   baseUrl: 'https://portal.tanmaysinghx.com',
   applicationId: '5de93ba7-0673-4fba-8e9b-a1bdb8466f03',
   clientId: 'eggless-observability',
-  redirectUri: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : 'https://eggless.tanmaysinghx.com/auth/callback'
+  redirectUri: 'https://eggless.tanmaysinghx.com/auth/callback',
+  scopes: 'openid profile email'
 };
 
 @Injectable({
@@ -76,9 +79,11 @@ export class SsoService {
   private isAuthenticatedSubject = new BehaviorSubject<boolean>(false);
   public isAuthenticated$: Observable<boolean> = this.isAuthenticatedSubject.asObservable();
 
+  private configReady: Promise<void>;
+
   constructor() {
     this.restoreSession();
-    this.syncBackendConfig();
+    this.configReady = this.syncBackendConfig();
   }
 
   public get currentUserValue(): SsoUser | null {
@@ -118,6 +123,7 @@ export class SsoService {
         if (res.applicationId) this.config.applicationId = res.applicationId;
         if (res.clientId) this.config.clientId = res.clientId;
         if (res.redirectUri) this.config.redirectUri = res.redirectUri;
+        if (res.scopes) this.config.scopes = res.scopes;
         localStorage.setItem('eggless_portal_config', JSON.stringify(this.config));
       }
     } catch {
@@ -145,94 +151,40 @@ export class SsoService {
   // ==========================================
   // 1. OAUTH 2.1 / OIDC PKCE BROWSER FLOW
   // ==========================================
+  // The browser only runs the PKCE authorize step. The code is always exchanged by the
+  // backend (/api/auth/exchange), which holds the client secret and verifies the ID token.
 
   /**
    * Seamless Okta-style popup login window with zero page-reloads.
-   * Powered by @tanmaysinghx/portal-sso SDK.
+   * Powered by @tanmaysinghx/portal-sso SDK, using its pre-registered popup callback.
    */
   public async loginWithPopup(): Promise<SsoUser> {
-    const portalUrl = this.config.baseUrl.replace(/\/+$/, '');
+    await this.configReady;
     const ssoClient = new PortalSSO({
-      portalUrl: portalUrl,
+      portalUrl: this.config.baseUrl.replace(/\/+$/, ''),
       clientId: this.config.clientId,
-      redirectUri: 'https://portal.tanmaysinghx.com/oauth2/popup-callback'
+      scope: this.config.scopes
     });
 
-    // Intercept token exchange to route through backend proxy (/api/auth/exchange)
-    // with client_secret, completely immune to browser CORS restrictions
+    let ssoUser: SsoUser | null = null;
     (ssoClient as any).exchangeCodeForTokens = async (code: string, codeVerifier: string, redirectUri: string) => {
-      let tokenData: any;
-      try {
-        tokenData = await firstValueFrom(
-          this.http.post<any>(`${this.backendAuthUrl}/exchange`, {
-            code,
-            codeVerifier,
-            redirectUri
-          })
-        );
-      } catch {
-        // Direct browser fallback
-        const tokenEndpoint = `${portalUrl}/oauth2/token`;
-        const body = new URLSearchParams();
-        body.append('grant_type', 'authorization_code');
-        body.append('client_id', this.config.clientId);
-        body.append('code', code);
-        body.append('code_verifier', codeVerifier);
-        body.append('redirect_uri', redirectUri);
-        const res = await fetch(tokenEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString()
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error_description || err.error || 'Failed to exchange authorization code');
-        }
-        tokenData = await res.json();
-      }
-
-      const idClaims = tokenData.id_token ? this.parseJwt(tokenData.id_token) : {};
-      const accessClaims = tokenData.access_token ? this.parseJwt(tokenData.access_token) : {};
-      const user: SsoSdkUser = {
-        id: idClaims.sub || accessClaims.sub || '',
-        email: idClaims.email || accessClaims.email || '',
-        name: idClaims.name || idClaims.preferred_username || idClaims.email || 'User',
-        roles: idClaims.roles || accessClaims.roles || ['ROLE_USER'],
-        rawClaims: idClaims
-      };
-
-      const expiresAt = Date.now() + (tokenData.expires_in ? tokenData.expires_in * 1000 : 3600 * 1000);
+      const tokenData = await this.exchangeViaBackend(code, codeVerifier, redirectUri);
+      ssoUser = this.mapVerifiedTokens(tokenData, 'Portal SSO (Popup OAuth 2.1)');
       return {
-        user,
-        accessToken: tokenData.access_token || '',
-        idToken: tokenData.id_token || '',
-        refreshToken: tokenData.refresh_token,
-        expiresIn: tokenData.expires_in,
-        expiresAt
+        user: { id: ssoUser.id, email: ssoUser.email, name: ssoUser.name, roles: ssoUser.roles, rawClaims: ssoUser.claims },
+        accessToken: ssoUser.accessToken || '',
+        idToken: ssoUser.idToken || '',
+        expiresAt: new Date(ssoUser.expiresAt!).getTime()
       };
     };
 
-    const session = await ssoClient.loginWithPopup();
-    const ssoUser: SsoUser = {
-      id: session.user.id,
-      name: session.user.name || session.user.email,
-      email: session.user.email,
-      role: session.user.roles?.[0] || 'ROLE_USER',
-      roles: session.user.roles || ['ROLE_USER'],
-      tenant: new URL(this.config.baseUrl).hostname,
-      avatar: this.getInitials(session.user.name || session.user.email),
-      ssoProvider: 'Portal SSO (Popup OAuth 2.1)',
-      idToken: session.idToken,
-      accessToken: session.accessToken,
-      expiresAt: new Date(session.expiresAt).toISOString(),
-      claims: session.user.rawClaims
-    };
-
-    this.saveUserSession(ssoUser);
-    return ssoUser;
+    await ssoClient.loginWithPopup();
+    this.saveUserSession(ssoUser!);
+    return ssoUser!;
   }
 
   public async initiatePortalSsoLogin(): Promise<void> {
+    await this.configReady;
     const verifier = this.generateRandomString(64);
     const state = this.generateRandomString(32);
     const challenge = await this.generateCodeChallenge(verifier);
@@ -240,12 +192,11 @@ export class SsoService {
     sessionStorage.setItem('portal_pkce_verifier', verifier);
     sessionStorage.setItem('portal_auth_state', state);
 
-    const redirectUri = `${window.location.origin}/auth/callback`;
     const authUrl = new URL(`${this.config.baseUrl.replace(/\/+$/, '')}/oauth2/authorize`);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('client_id', this.config.clientId);
-    authUrl.searchParams.set('redirect_uri', redirectUri);
-    authUrl.searchParams.set('scope', 'openid profile email');
+    authUrl.searchParams.set('redirect_uri', this.config.redirectUri);
+    authUrl.searchParams.set('scope', this.config.scopes);
     authUrl.searchParams.set('state', state);
     authUrl.searchParams.set('code_challenge', challenge);
     authUrl.searchParams.set('code_challenge_method', 'S256');
@@ -254,6 +205,7 @@ export class SsoService {
   }
 
   public async handleOidcCallback(code: string, state: string): Promise<SsoUser> {
+    await this.configReady;
     const savedState = sessionStorage.getItem('portal_auth_state');
     const verifier = sessionStorage.getItem('portal_pkce_verifier');
 
@@ -268,83 +220,46 @@ export class SsoService {
     sessionStorage.removeItem('portal_auth_state');
     sessionStorage.removeItem('portal_pkce_verifier');
 
-    const redirectUri = `${window.location.origin}/auth/callback`;
-    let tokenData: any;
+    const tokenData = await this.exchangeViaBackend(code, verifier, this.config.redirectUri);
+    const user = this.mapVerifiedTokens(tokenData, 'Portal SSO (OAuth 2.1 / OIDC PKCE)');
+    this.saveUserSession(user);
+    return user;
+  }
 
-    // 1. Primary: Server-side token exchange (avoids browser CORS)
+  private async exchangeViaBackend(code: string, codeVerifier: string, redirectUri: string): Promise<any> {
     try {
-      tokenData = await firstValueFrom(
-        this.http.post<any>(`${this.backendAuthUrl}/exchange`, {
-          code: code,
-          codeVerifier: verifier,
-          redirectUri: redirectUri
-        })
+      return await firstValueFrom(
+        this.http.post<any>(`${this.backendAuthUrl}/exchange`, { code, codeVerifier, redirectUri })
       );
-    } catch (backendErr: any) {
-      // 2. Fallback: Direct browser fetch
-      const tokenUrl = `${this.config.baseUrl.replace(/\/+$/, '')}/oauth2/token`;
-      const body = new URLSearchParams();
-      body.set('grant_type', 'authorization_code');
-      body.set('client_id', this.config.clientId);
-      body.set('code', code);
-      body.set('redirect_uri', redirectUri);
-      body.set('code_verifier', verifier);
-
-      const res = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString()
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error_description || err.error || backendErr?.error?.error || `Token exchange failed: ${res.status}`);
-      }
-      tokenData = await res.json();
+    } catch (err: any) {
+      throw new Error(err?.error?.error || err?.message || 'Token exchange failed with Portal SSO.');
     }
+  }
 
-    const idToken = tokenData.id_token;
-    const accessToken = tokenData.access_token;
-    const claims = idToken ? this.parseJwt(idToken) : {};
-    let profileData: any = tokenData.userinfo || {};
+  /** Maps the backend's signature-verified claims to the app's user model. */
+  private mapVerifiedTokens(tokenData: any, provider: string): SsoUser {
+    const claims = tokenData.claims || {};
+    const email = claims.email || claims.sub;
+    const name = claims.name
+      || [claims.given_name || claims.firstName, claims.family_name || claims.lastName].filter(Boolean).join(' ')
+      || claims.preferred_username
+      || email.split('@')[0];
+    const roles: string[] = claims.roles?.length ? claims.roles : ['ROLE_USER'];
 
-    if (!profileData.email && accessToken) {
-      try {
-        const userinfoRes = await fetch(`${this.config.baseUrl.replace(/\/+$/, '')}/userinfo`, {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        });
-        if (userinfoRes.ok) {
-          profileData = await userinfoRes.json();
-        }
-      } catch {
-        // Fallback to claims
-      }
-    }
-
-    const email = profileData.email || claims.email || claims.sub || 'user@portalsso.local';
-    const name = profileData.name || profileData.firstName
-      ? `${profileData.firstName || ''} ${profileData.lastName || ''}`.trim()
-      : (claims.name || email.split('@')[0]);
-
-    const roles: string[] = profileData.roles || claims.roles || ['ROLE_USER'];
-
-    const user: SsoUser = {
-      id: profileData.sub || profileData.id || claims.sub || `usr_${Date.now()}`,
+    return {
+      id: claims.sub,
       name: name,
       email: email,
       role: roles.includes('ROLE_ADMIN') ? 'Administrator (ROLE_ADMIN)' : 'Observability Engineer',
       roles: roles,
-      tenant: 'portal.tanmaysinghx.com',
+      tenant: new URL(this.config.baseUrl).hostname,
       avatar: this.getInitials(name),
-      ssoProvider: 'Portal SSO (OAuth 2.1 / OIDC PKCE)',
-      idToken: idToken,
-      accessToken: accessToken,
+      ssoProvider: provider,
+      idToken: tokenData.id_token,
+      accessToken: tokenData.access_token,
       expiresAt: new Date(Date.now() + (tokenData.expires_in || 3600) * 1000).toISOString(),
       claims: claims
     };
-
-    this.saveUserSession(user);
-    return user;
   }
 
   // ==========================================
@@ -365,9 +280,6 @@ export class SsoService {
       }
       throw new Error(resp?.message || 'Invalid credentials in Portal SSO');
     } catch (err: any) {
-      if (err.status === 0 || err.status === 404 || err.status === 503) {
-        return this.directExternalLogin(email, pass);
-      }
       throw new Error(err?.error?.message || err.message || 'Authentication failed');
     }
   }
@@ -395,25 +307,6 @@ export class SsoService {
     } catch (err: any) {
       throw new Error(err?.error?.message || err.message || 'Registration failed');
     }
-  }
-
-  private async directExternalLogin(email: string, pass: string): Promise<SsoUser> {
-    const url = `${this.config.baseUrl.replace(/\/+$/, '')}/api/external/apps/${this.config.applicationId}/login`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email, password: pass })
-    });
-
-    if (res.ok) {
-      const data: PortalAuthResponse = await res.json();
-      if (data.authenticated && data.user) {
-        return this.mapPortalUserToSsoUser(data.user, 'Portal SSO External Auth API');
-      }
-    }
-
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || 'Unable to authenticate with Portal SSO External API');
   }
 
   // ==========================================
@@ -505,22 +398,6 @@ export class SsoService {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
     return (name[0] || 'U').toUpperCase();
-  }
-
-  private parseJwt(token: string): any {
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
-    } catch {
-      return {};
-    }
   }
 
   private generateRandomString(length: number): string {

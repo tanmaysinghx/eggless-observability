@@ -104,15 +104,20 @@ The resulting artifact is placed at:
 Eggless Observability integrates seamlessly with **Portal SSO** for both interactive browser single sign-on and programmatic agent authentication:
 
 ```bash
-export PORTAL_BASE_URL="https://portal.tanmaysinghx.com"
-export PORTAL_APP_ID="3fa85f64-5717-4562-b3fc-2c963f66afa6"
-export PORTAL_APP_KEY="prtl_key_..."
-export PORTAL_CLIENT_ID="eggless-observability"
-
-java -jar eggless-observability.jar
+cp .env.example .env   # then fill in PORTAL_CLIENT_SECRET and PORTAL_API_KEY from the secret store
+docker compose up -d   # or export the same variables and run: java -jar eggless-observability.jar
 ```
 
-- **Interactive SSO**: Sign in via OAuth 2.1 PKCE (`/oauth2/authorize`).
+| Variable | Purpose |
+|---|---|
+| `PORTAL_URL` | Issuer, `https://portal.tanmaysinghx.com` |
+| `PORTAL_CLIENT_ID` | `eggless-observability` |
+| `PORTAL_REDIRECT_URI` | Must exactly match a registered URI (`https://eggless.tanmaysinghx.com/auth/callback`) |
+| `PORTAL_SCOPES` | `openid profile email` |
+| `PORTAL_CLIENT_SECRET` | Confidential client secret, used only by the server's token exchange |
+| `PORTAL_API_KEY` | `X-Portal-App-Key` for the External Auth API, used only by the server |
+
+- **Interactive SSO**: Sign in via OAuth 2.1 + PKCE (S256). The browser only runs the authorize step; the server exchanges the code with the client secret and verifies the ID token against Portal SSO's JWKS (RS256).
 - **External Auth REST API**: Direct headless user login and registration (`/api/auth/login`, `/api/auth/register`).
 
 ---

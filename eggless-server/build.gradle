@@ -24,6 +24,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 	implementation 'com.fasterxml.jackson.core:jackson-databind'
+	// JWKS-based ID token signature verification (no Spring Security filter chain is enabled)
+	implementation 'org.springframework.security:spring-security-oauth2-jose'
 
 	// Multi-database support: H2 embedded by default, PostgreSQL & MySQL ready out of the box
 	runtimeOnly 'com.h2database:h2'

@@ -6,14 +6,26 @@ import com.tanmaysinghx.eggless_server.dto.PortalAuthResponse;
 import com.tanmaysinghx.eggless_server.dto.PortalRegisterRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -27,12 +39,12 @@ public class PortalSsoClient {
 
     private final PortalSsoProperties properties;
     private final RestClient restClient;
+    private JwtDecoder idTokenDecoder;
 
     public PortalSsoClient(PortalSsoProperties properties) {
         this.properties = properties;
-        String base = properties.getBaseUrl() != null ? properties.getBaseUrl().replaceAll("/+$", "") : "https://portal.tanmaysinghx.com";
         this.restClient = RestClient.builder()
-                .baseUrl(base)
+                .baseUrl(properties.getNormalizedBaseUrl())
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }
@@ -104,57 +116,36 @@ public class PortalSsoClient {
     }
 
     /**
-     * Server-side OAuth 2.1 authorization code exchange with Portal SSO.
-     * Keeps token exchange reliable and avoids browser CORS restrictions.
+     * Server-side OAuth 2.1 authorization code exchange (confidential client, PKCE S256).
+     * Authenticates with client_secret_basic, verifies the ID token signature against the
+     * issuer's JWKS (RS256), and returns only what the SPA needs. The refresh token stays server-side.
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> exchangeToken(String code, String codeVerifier, String redirectUri) {
-        String base = properties.getBaseUrl() != null ? properties.getBaseUrl().replaceAll("/+$", "") : "https://portal.tanmaysinghx.com";
+        if (properties.getClientSecret() == null || properties.getClientSecret().isBlank()) {
+            throw new IllegalStateException("PORTAL_CLIENT_SECRET is not configured");
+        }
+        String base = properties.getNormalizedBaseUrl();
         String tokenUrl = base + "/oauth2/token";
-        String uriToUse = (redirectUri != null && !redirectUri.isBlank()) ? redirectUri : properties.getRedirectUri();
-        log.info("Exchanging OAuth code with Portal SSO at {} (redirect_uri: {})", tokenUrl, uriToUse);
+        log.info("Exchanging OAuth code with Portal SSO at {} (redirect_uri: {})", tokenUrl, redirectUri);
 
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "authorization_code");
-        form.add("client_id", properties.getClientId());
         form.add("code", code);
-        form.add("redirect_uri", uriToUse);
+        form.add("redirect_uri", redirectUri);
         form.add("code_verifier", codeVerifier);
 
-        if (properties.getClientSecret() != null && !properties.getClientSecret().isBlank()) {
-            form.add("client_secret", properties.getClientSecret());
-        }
-
+        Map<String, Object> tokenResponse;
         try {
-            var requestSpec = restClient.post()
+            tokenResponse = restClient.post()
                     .uri(tokenUrl)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                    .body(form);
-
-            if (properties.getClientSecret() != null && !properties.getClientSecret().isBlank()) {
-                String credentials = properties.getClientId() + ":" + properties.getClientSecret();
-                String basicAuth = java.util.Base64.getEncoder().encodeToString(credentials.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                requestSpec.header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth);
-            }
-
-            Map<String, Object> tokenResponse = requestSpec.retrieve().body(Map.class);
-
-            if (tokenResponse != null && tokenResponse.containsKey("access_token")) {
-                String accessToken = (String) tokenResponse.get("access_token");
-                try {
-                    Map<String, Object> userinfo = restClient.get()
-                            .uri(base + "/userinfo")
-                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
-                            .retrieve()
-                            .body(Map.class);
-                    if (userinfo != null) {
-                        tokenResponse.put("userinfo", userinfo);
-                    }
-                } catch (Exception e) {
-                    log.warn("Could not retrieve userinfo from Portal SSO: {}", e.getMessage());
-                }
-            }
-            return tokenResponse;
+                    .headers(h -> h.setBasicAuth(
+                            URLEncoder.encode(properties.getClientId(), StandardCharsets.UTF_8),
+                            URLEncoder.encode(properties.getClientSecret(), StandardCharsets.UTF_8)))
+                    .body(form)
+                    .retrieve()
+                    .body(Map.class);
         } catch (org.springframework.web.client.RestClientResponseException rcEx) {
             String errorBody = rcEx.getResponseBodyAsString();
             log.error("Portal SSO OAuth token exchange error ({}): {}", rcEx.getStatusCode(), errorBody);
@@ -164,6 +155,58 @@ public class PortalSsoClient {
             log.error("Portal SSO OAuth token exchange error: {}", e.getMessage());
             throw new RuntimeException("Token exchange failed with Portal SSO: " + e.getMessage());
         }
+
+        if (tokenResponse == null || !(tokenResponse.get("id_token") instanceof String idToken)) {
+            throw new RuntimeException("Token exchange failed with Portal SSO: no id_token returned");
+        }
+
+        Jwt verified;
+        try {
+            verified = idTokenDecoder().decode(idToken);
+        } catch (JwtException e) {
+            log.error("Portal SSO ID token verification failed: {}", e.getMessage());
+            throw new RuntimeException("ID token verification failed: " + e.getMessage());
+        }
+
+        Map<String, Object> claims = new HashMap<>(verified.getClaims());
+        String accessToken = (String) tokenResponse.get("access_token");
+        if (accessToken != null) {
+            try {
+                Map<String, Object> userinfo = restClient.get()
+                        .uri(base + "/userinfo")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                        .retrieve()
+                        .body(Map.class);
+                // userinfo must describe the same subject as the verified ID token
+                if (userinfo != null && verified.getSubject().equals(userinfo.get("sub"))) {
+                    userinfo.forEach(claims::putIfAbsent);
+                }
+            } catch (Exception e) {
+                log.warn("Could not retrieve userinfo from Portal SSO: {}", e.getMessage());
+            }
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("id_token", idToken);
+        result.put("access_token", accessToken);
+        result.put("expires_in", tokenResponse.get("expires_in"));
+        result.put("claims", claims);
+        return result;
+    }
+
+    private synchronized JwtDecoder idTokenDecoder() {
+        if (idTokenDecoder == null) {
+            String issuer = properties.getNormalizedBaseUrl();
+            NimbusJwtDecoder decoder = NimbusJwtDecoder.withIssuerLocation(issuer)
+                    .jwsAlgorithm(SignatureAlgorithm.RS256)
+                    .build();
+            OAuth2TokenValidator<Jwt> audience = new JwtClaimValidator<List<String>>(
+                    JwtClaimNames.AUD, aud -> aud != null && aud.contains(properties.getClientId()));
+            decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                    JwtValidators.createDefaultWithIssuer(issuer), audience));
+            idTokenDecoder = decoder;
+        }
+        return idTokenDecoder;
     }
 
     private String extractErrorMessage(String jsonBody, String defaultMessage) {
@@ -191,7 +234,7 @@ public class PortalSsoClient {
      * Checks if Portal SSO OIDC Discovery is reachable and healthy server-to-server.
      */
     public Map<String, Object> checkHealth() {
-        String base = properties.getBaseUrl() != null ? properties.getBaseUrl().replaceAll("/+$", "") : "https://portal.tanmaysinghx.com";
+        String base = properties.getNormalizedBaseUrl();
         String url = base + "/.well-known/openid-configuration";
         Map<String, Object> result = new HashMap<>();
         try {

@@ -28,29 +28,14 @@ public class AuthController {
      * The sensitive appKey is NEVER exposed here.
      */
     @GetMapping("/config")
-    public ResponseEntity<Map<String, Object>> getConfig(jakarta.servlet.http.HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> getConfig() {
         Map<String, Object> config = new HashMap<>();
-        config.put("baseUrl", properties.getBaseUrl());
+        config.put("baseUrl", properties.getNormalizedBaseUrl());
         config.put("applicationId", properties.getApplicationId());
         config.put("clientId", properties.getClientId());
-
-        String redirectUri = properties.getRedirectUri();
-        // Dynamically adapt redirect URI to the actual incoming request host/domain
-        String proto = request.getHeader("X-Forwarded-Proto");
-        if (proto == null || proto.isBlank()) {
-            proto = request.getScheme();
-        }
-        String host = request.getHeader("X-Forwarded-Host");
-        if (host == null || host.isBlank()) {
-            host = request.getHeader("Host");
-        }
-        if (host != null && !host.isBlank()) {
-            redirectUri = proto + "://" + host + "/auth/callback";
-        } else if (redirectUri == null || redirectUri.isBlank()) {
-            redirectUri = "https://eggless.tanmaysinghx.com/auth/callback";
-        }
-
-        config.put("redirectUri", redirectUri);
+        // Must match a URI registered in Portal SSO exactly; never derived from the request host.
+        config.put("redirectUri", properties.getRedirectUri());
+        config.put("scopes", properties.getScopes());
         config.put("hasAppKey", properties.getAppKey() != null && !properties.getAppKey().isBlank());
         return ResponseEntity.ok(config);
     }
@@ -105,6 +90,12 @@ public class AuthController {
 
         if (code == null || codeVerifier == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "code and codeVerifier are required"));
+        }
+        if (redirectUri == null || redirectUri.isBlank()) {
+            redirectUri = properties.getRedirectUri();
+        }
+        if (!redirectUri.equals(properties.getRedirectUri()) && !redirectUri.equals(properties.getPopupRedirectUri())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "redirectUri is not a registered Portal SSO redirect URI"));
         }
 
         try {

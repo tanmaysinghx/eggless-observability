@@ -12,10 +12,13 @@ services:
     environment:
       SERVER_PORT: "8080"
       EGGLESS_HOME: "/home/eggless/.eggless"
-      PORTAL_BASE_URL: "${PORTAL_BASE_URL:-https://portal.tanmaysinghx.com}"
-      PORTAL_APP_ID: "${PORTAL_APP_ID:-3fa85f64-5717-4562-b3fc-2c963f66afa6}"
-      PORTAL_APP_KEY: "${PORTAL_APP_KEY:-}"
+      PORTAL_URL: "${PORTAL_URL:-https://portal.tanmaysinghx.com}"
       PORTAL_CLIENT_ID: "${PORTAL_CLIENT_ID:-eggless-observability}"
+      PORTAL_REDIRECT_URI: "${PORTAL_REDIRECT_URI:-https://eggless.tanmaysinghx.com/auth/callback}"
+      PORTAL_SCOPES: "${PORTAL_SCOPES:-openid profile email}"
+      # Secrets: set in .env (git-ignored) or your secret manager
+      PORTAL_CLIENT_SECRET: "${PORTAL_CLIENT_SECRET:-}"
+      PORTAL_API_KEY: "${PORTAL_API_KEY:-}"
     volumes:
       - eggless-data:/home/eggless/.eggless/data
     restart: always
