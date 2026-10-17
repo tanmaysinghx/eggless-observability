@@ -28,6 +28,7 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:FRAMEWORK}
   compression:
     enabled: true
     mime-types: text/html,text/css,text/plain,application/javascript,text/javascript,application/json,image/svg+xml
@@ -38,9 +39,9 @@ portal:
   sso:
     base-url: ${PORTAL_BASE_URL:https://portal.tanmaysinghx.com}
     application-id: ${PORTAL_APP_ID:3fa85f64-5717-4562-b3fc-2c963f66afa6}
-    app-key: ${PORTAL_APP_KEY:}
+    app-key: ${PORTAL_APP_KEY:psso_app__qQ9WXrurQ0WdDpYZ3OhbxKhrJuSpLhS6cUdsHUZYiA}
     client-id: ${PORTAL_CLIENT_ID:eggless-observability}
-    redirect-uri: ${PORTAL_REDIRECT_URI:http://localhost:8080/auth/callback}
+    redirect-uri: ${PORTAL_REDIRECT_URI:https://eggless.tanmaysinghx.com/auth/callback}
 
 management:
   endpoints:

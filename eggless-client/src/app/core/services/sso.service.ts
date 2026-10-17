@@ -116,6 +116,7 @@ export class SsoService {
         this.config.baseUrl = res.baseUrl;
         if (res.applicationId) this.config.applicationId = res.applicationId;
         if (res.clientId) this.config.clientId = res.clientId;
+        if (res.redirectUri) this.config.redirectUri = res.redirectUri;
         localStorage.setItem('eggless_portal_config', JSON.stringify(this.config));
       }
     } catch {

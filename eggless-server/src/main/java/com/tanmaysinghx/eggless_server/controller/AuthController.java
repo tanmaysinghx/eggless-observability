@@ -28,12 +28,29 @@ public class AuthController {
      * The sensitive appKey is NEVER exposed here.
      */
     @GetMapping("/config")
-    public ResponseEntity<Map<String, Object>> getConfig() {
+    public ResponseEntity<Map<String, Object>> getConfig(jakarta.servlet.http.HttpServletRequest request) {
         Map<String, Object> config = new HashMap<>();
         config.put("baseUrl", properties.getBaseUrl());
         config.put("applicationId", properties.getApplicationId());
         config.put("clientId", properties.getClientId());
-        config.put("redirectUri", properties.getRedirectUri());
+
+        String redirectUri = properties.getRedirectUri();
+        // Dynamically adapt redirect URI to the actual incoming request host/domain
+        String proto = request.getHeader("X-Forwarded-Proto");
+        if (proto == null || proto.isBlank()) {
+            proto = request.getScheme();
+        }
+        String host = request.getHeader("X-Forwarded-Host");
+        if (host == null || host.isBlank()) {
+            host = request.getHeader("Host");
+        }
+        if (host != null && !host.isBlank()) {
+            redirectUri = proto + "://" + host + "/auth/callback";
+        } else if (redirectUri == null || redirectUri.isBlank()) {
+            redirectUri = "https://eggless.tanmaysinghx.com/auth/callback";
+        }
+
+        config.put("redirectUri", redirectUri);
         config.put("hasAppKey", properties.getAppKey() != null && !properties.getAppKey().isBlank());
         return ResponseEntity.ok(config);
     }
