@@ -13,37 +13,37 @@ import { LogService } from '../../core/services/log.service';
       [ngClass]="isCollapsed ? 'w-16' : 'w-60'"
     >
       <!-- Top Brand Header -->
-      <div class="h-16 px-3 flex items-center justify-between border-b border-[#20293a]/80">
+      <div class="h-14 px-3 flex items-center justify-between border-b border-[#20293a]">
         <a routerLink="/logs" class="flex items-center gap-2.5 overflow-hidden group">
-          <div class="w-10 h-10 rounded-lg eggless-logo-box border p-1 flex items-center justify-center shrink-0 group-hover:border-[#f59e0b] transition-colors shadow-sm">
+          <div class="w-8 h-8 rounded-lg eggless-logo-box border p-1 flex items-center justify-center shrink-0 group-hover:border-[#f59e0b] transition-colors shadow-sm">
             <img src="eggless-logo.png" alt="Eggless" class="w-full h-full object-contain filter drop-shadow(0 0 2px rgba(245,158,11,0.3))" />
           </div>
-          <span *ngIf="!isCollapsed" class="font-bold text-base tracking-tight text-[#f0f4f8] group-hover:text-white transition-colors">
-            Eggless<span class="text-[#f59e0b] font-normal text-xs ml-1.5 px-1.5 py-0.5 rounded bg-[#f59e0b]/10 border border-[#f59e0b]/20">LOGS</span>
+          <span *ngIf="!isCollapsed" class="font-bold text-sm tracking-tight text-[#f0f4f8] group-hover:text-[#f59e0b] transition-colors">
+            Eggless
           </span>
         </a>
 
         <button
           (click)="toggleCollapse.emit()"
-          class="text-[#94a3b8] hover:text-[#f0f4f8] p-1.5 rounded hover:bg-[#1a2332] transition-colors focus:outline-none"
+          class="text-[#94a3b8] hover:text-[#f0f4f8] p-1.5 rounded-md hover:bg-[#1a2332] transition-colors focus:outline-none"
           [title]="isCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'"
         >
-          <svg class="w-4 h-4 transition-transform duration-200" [ngClass]="{'rotate-180': isCollapsed}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-3.5 h-3.5 transition-transform duration-200" [ngClass]="{'rotate-180': isCollapsed}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
           </svg>
         </button>
       </div>
 
       <!-- Navigation Items -->
-      <div class="flex-1 overflow-y-auto py-3 px-2 space-y-4">
-        <!-- Main Nav Group -->
-        <nav class="space-y-1">
+      <div class="flex-1 overflow-y-auto py-3 px-2">
+        <!-- Unified Nav Group -->
+        <nav class="space-y-0.5">
           <a
             *ngFor="let item of navItems"
             [routerLink]="item.path"
-            routerLinkActive="bg-[#1c273a] text-[#f59e0b] font-medium border-l-2 border-[#f59e0b]"
+            routerLinkActive="bg-[#1c273a] text-[#f59e0b] font-semibold"
             [routerLinkActiveOptions]="{exact: item.exact}"
-            class="flex items-center gap-3 px-3 py-2 rounded-md text-xs text-[#94a3b8] hover:text-[#f0f4f8] hover:bg-[#161e2c] transition-colors group relative"
+            class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-[#94a3b8] hover:text-[#f0f4f8] hover:bg-[#161e2c] transition-colors group relative font-medium"
             [title]="isCollapsed ? item.label : ''"
           >
             <ng-container [ngSwitch]="item.path">
@@ -65,50 +65,12 @@ import { LogService } from '../../core/services/log.service';
             </ng-container>
 
             <span *ngIf="!isCollapsed" class="truncate">{{ item.label }}</span>
-            <span *ngIf="item.badge && !isCollapsed" class="ml-auto bg-[#f59e0b]/20 text-[#fbbf24] text-[10px] font-semibold px-1.5 py-0.2 rounded border border-[#f59e0b]/30">
-              {{ item.badge }}
-            </span>
           </a>
-        </nav>
 
-        <div class="border-t border-[#20293a]"></div>
-
-        <!-- Applications Section -->
-        <div>
-          <div *ngIf="!isCollapsed" class="px-3 pb-1.5 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
-            <span>Applications</span>
-            <span class="text-[9px] bg-[#161e2c] px-1 rounded border border-[#20293a] text-[#94a3b8]">{{ (apps$ | async)?.length || 0 }}</span>
-          </div>
-
-          <div class="space-y-0.5">
-            <button
-              *ngFor="let app of (apps$ | async)"
-              (click)="selectApp(app.id)"
-              [ngClass]="(selectedApp$ | async) === app.id ? 'bg-[#1c273a] text-[#f0f4f8] font-medium' : 'text-[#94a3b8] hover:text-[#f0f4f8] hover:bg-[#161e2c]'"
-              class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-xs text-left transition-colors group"
-              [title]="isCollapsed ? app.name + ' (' + app.status + ')' : ''"
-            >
-              <span
-                class="w-2 h-2 rounded-full shrink-0"
-                [ngClass]="{
-                  'bg-[#10b981] shadow-sm shadow-[#10b981]/50': app.status === 'healthy',
-                  'bg-[#f59e0b] shadow-sm shadow-[#f59e0b]/50': app.status === 'warning',
-                  'bg-[#ef4444] shadow-sm shadow-[#ef4444]/50 animate-pulse': app.status === 'critical'
-                }"
-              ></span>
-              <span *ngIf="!isCollapsed" class="truncate font-mono text-[11px]">{{ app.name }}</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="border-t border-[#20293a]"></div>
-
-        <!-- Settings & Admin Section -->
-        <div class="space-y-0.5">
           <a
             routerLink="/settings"
-            routerLinkActive="bg-[#1c273a] text-[#f59e0b] font-medium"
-            class="flex items-center gap-3 px-3 py-2 rounded-md text-xs text-[#94a3b8] hover:text-[#f0f4f8] hover:bg-[#161e2c] transition-colors"
+            routerLinkActive="bg-[#1c273a] text-[#f59e0b] font-semibold"
+            class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-[#94a3b8] hover:text-[#f0f4f8] hover:bg-[#161e2c] transition-colors font-medium"
             [title]="isCollapsed ? 'Settings' : ''"
           >
             <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -121,7 +83,7 @@ import { LogService } from '../../core/services/log.service';
           <a
             routerLink="/settings"
             [queryParams]="{tab: 'apikeys'}"
-            class="flex items-center gap-3 px-3 py-2 rounded-md text-xs text-[#94a3b8] hover:text-[#f0f4f8] hover:bg-[#161e2c] transition-colors"
+            class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-[#94a3b8] hover:text-[#f0f4f8] hover:bg-[#161e2c] transition-colors font-medium"
             [title]="isCollapsed ? 'API Keys' : ''"
           >
             <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,7 +95,7 @@ import { LogService } from '../../core/services/log.service';
           <a
             href="https://docs.eggless.io"
             target="_blank"
-            class="flex items-center gap-3 px-3 py-2 rounded-md text-xs text-[#94a3b8] hover:text-[#f0f4f8] hover:bg-[#161e2c] transition-colors"
+            class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-[#94a3b8] hover:text-[#f0f4f8] hover:bg-[#161e2c] transition-colors font-medium"
             [title]="isCollapsed ? 'Documentation' : ''"
           >
             <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -141,16 +103,7 @@ import { LogService } from '../../core/services/log.service';
             </svg>
             <span *ngIf="!isCollapsed">Documentation</span>
           </a>
-        </div>
-      </div>
-
-      <!-- Sidebar Footer User / Version Info -->
-      <div *ngIf="!isCollapsed" class="p-3 border-t border-[#20293a] bg-[#0b0e14]/50 flex items-center justify-between text-[11px] text-[#64748b]">
-        <span class="font-mono">v2.4.0-prod</span>
-        <span class="flex items-center gap-1 text-[#10b981]">
-          <span class="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
-          Connected
-        </span>
+        </nav>
       </div>
     </aside>
   `
@@ -167,7 +120,7 @@ export class EgglessSidebarComponent {
 
   navItems = [
     { label: 'Overview', path: '/overview', exact: true },
-    { label: 'Logs', path: '/logs', exact: false, badge: 'HERO' },
+    { label: 'Logs', path: '/logs', exact: false },
     { label: 'Applications', path: '/applications', exact: false },
     { label: 'Dashboards', path: '/dashboards', exact: false },
     { label: 'Alerts', path: '/alerts', exact: false }

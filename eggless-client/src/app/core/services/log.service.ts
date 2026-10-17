@@ -8,8 +8,20 @@ import { LogEntry, LogFilter, LogStats, ApplicationInfo, AlertRule, ApiKey, Envi
   providedIn: 'root'
 })
 export class LogService {
-  private apiBase = 'http://localhost:8080/api/v1';
-  private wsBase = 'ws://localhost:8080/api/v1/logs/stream';
+  private get apiBase(): string {
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}/api/v1`;
+    }
+    return 'http://localhost:8080/api/v1';
+  }
+
+  private get wsBase(): string {
+    if (typeof window !== 'undefined') {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${proto}//${window.location.host}/api/v1/logs/stream`;
+    }
+    return 'ws://localhost:8080/api/v1/logs/stream';
+  }
   
   private http = inject(HttpClient);
 

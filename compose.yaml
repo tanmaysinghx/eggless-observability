@@ -1,0 +1,53 @@
+# Eggless Observability — Open Source Self-Hosting Stack
+#
+# Quick Start (H2 Embedded Database - Zero Setup):
+#   docker compose up -d
+#
+# Open in browser: http://localhost:8080
+
+name: eggless-observability
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: eggless-observability:latest
+    container_name: eggless-observability
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    environment:
+      SERVER_PORT: "8080"
+      EGGLESS_HOME: "/home/eggless/.eggless"
+      # To switch to external PostgreSQL:
+      # DB_URL: "jdbc:postgresql://postgres:5432/eggless"
+      # DB_USERNAME: "postgres"
+      # DB_PASSWORD: "secretpassword"
+      PORTAL_BASE_URL: "${PORTAL_BASE_URL:-https://portal.tanmaysinghx.com}"
+      PORTAL_APP_ID: "${PORTAL_APP_ID:-3fa85f64-5717-4562-b3fc-2c963f66afa6}"
+      PORTAL_APP_KEY: "${PORTAL_APP_KEY:-}"
+      PORTAL_CLIENT_ID: "${PORTAL_CLIENT_ID:-eggless-observability}"
+    volumes:
+      - eggless-data:/home/eggless/.eggless/data
+
+  # Optional PostgreSQL database service (uncomment if you prefer Postgres over embedded H2):
+  # postgres:
+  #   image: postgres:17-alpine
+  #   container_name: eggless-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: eggless
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: secretpassword
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres -d eggless"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  eggless-data:
+  # postgres-data:

@@ -5,7 +5,7 @@
     --bg-app: #0b0e14;
     --bg-sidebar: #0f141d;
     --bg-topbar: #111622;
-    --bg-card: #151b26;
+    --bg-card: #121722;
     --bg-card-hover: #1c2433;
     --bg-input: #111622;
     --bg-drawer: #141a24;
@@ -28,16 +28,16 @@
     --color-trace: #64748b;
     --color-link: #3b82f6;
 
-    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-    --font-mono: 'JetBrains Mono', Consolas, Monaco, monospace;
+    --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, Monaco, monospace;
   }
 
   html.light {
-    --bg-app: #f4f6f9;
+    --bg-app: #f8fafc;
     --bg-sidebar: #ffffff;
     --bg-topbar: #ffffff;
     --bg-card: #ffffff;
-    --bg-card-hover: #f8fafc;
+    --bg-card-hover: #f1f5f9;
     --bg-input: #ffffff;
     --bg-drawer: #ffffff;
     
@@ -46,10 +46,18 @@
     --border-focus: #d97706;
 
     --text-primary: #0f172a;
-    --text-secondary: #334155;
+    --text-secondary: #475569;
     --text-muted: #64748b;
 
     --accent-egg: #d97706;
+    --accent-egg-glow: rgba(217, 119, 6, 0.15);
+
+    --color-info: #059669;
+    --color-warn: #b45309;
+    --color-error: #dc2626;
+    --color-debug: #7c3aed;
+    --color-trace: #64748b;
+    --color-link: #2563eb;
   }
 
   body {
@@ -57,6 +65,8 @@
     color: var(--text-primary);
     background-color: var(--bg-app);
     transition: background-color 0.15s ease, color 0.15s ease;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   
   code, pre, .font-mono {
@@ -65,53 +75,78 @@
 }
 
 /* ==========================================================================
-   LIGHT THEME HIGH-CONTRAST OVERRIDES
+   MODERN ENTERPRISE LIGHT THEME (Datadog / Linear / Stripe Architecture)
    ========================================================================== */
+
+/* 1. Layout Canvas, Headers, Sidebars, Drawers */
 html.light body {
-  background-color: #f4f6f9 !important;
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light main {
+  background-color: #f8fafc !important;
   color: #0f172a !important;
 }
 
 html.light aside {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
+  box-shadow: 1px 0 3px rgba(15, 23, 42, 0.03);
 }
 
 html.light header {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04) !important;
 }
 
-html.light main {
-  background-color: #f4f6f9 !important;
+/* 2. Cards, Surfaces, Elevation & Micro-Shadows */
+html.light .bg-\[\#0b0e14\] {
+  background-color: #f8fafc !important;
   color: #0f172a !important;
 }
 
-/* Card & Background Overrides for Light Mode */
-html.light .bg-\[\#0b0e14\] { background-color: #f4f6f9 !important; }
-html.light .bg-\[\#121722\], 
-html.light .bg-\[\#151b26\], 
+html.light .bg-\[\#121722\],
+html.light .bg-\[\#151b26\],
 html.light .bg-\[\#111622\],
-html.light .bg-\[\#0f141d\] { 
-  background-color: #ffffff !important; 
+html.light .bg-\[\#0f141d\] {
+  background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
-}
-
-html.light .bg-\[\#161e2c\],
-html.light .bg-\[\#1a2332\],
-html.light .bg-\[\#1c273a\] { 
-  background-color: #f1f5f9 !important; 
-  border-color: #cbd5e1 !important;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.04) !important;
 }
 
 html.light .bg-\[\#141a24\] {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
+  box-shadow: -8px 0 24px rgba(15, 23, 42, 0.08) !important;
 }
 
-/* Clicked / Selected items & Row clicks in Light Mode */
+html.light .bg-\[\#161e2c\] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .bg-\[\#1c273a\] {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Inset / Hover States */
+html.light .hover\:bg-\[\#161e2c\]:hover,
+html.light .hover\:bg-\[\#1a2332\]:hover,
+html.light .hover\:bg-\[\#1c2433\]:hover,
+html.light .hover\:bg-\[\#1f293d\]:hover,
+html.light .hover\:bg-\[\#25334c\]:hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* 3. Table Row Selection: Clean Soft Modern Blue (Linear/Datadog standard) */
 html.light .bg-\[\#1f2b3e\] {
-  background-color: #fef3c7 !important; /* Warm amber light highlight for selected table row */
+  background-color: #eff6ff !important;
+  border-left-color: #3b82f6 !important;
   color: #0f172a !important;
 }
 
@@ -127,15 +162,16 @@ html.light .bg-\[\#1c2433\] {
 }
 
 html.light .bg-\[\#121824\] {
-  background-color: #f8fafc !important;
+  background-color: #f1f5f9 !important;
   color: #0f172a !important;
 }
 
 html.light .bg-black\/60 {
-  background-color: rgba(15, 23, 42, 0.35) !important;
+  background-color: rgba(15, 23, 42, 0.45) !important;
+  backdrop-filter: blur(2px);
 }
 
-/* Logo Box styling for Light & Dark Mode */
+/* 4. Brand Logo Box */
 .eggless-logo-box {
   background-color: #182130;
   border-color: rgba(245, 158, 11, 0.3);
@@ -143,90 +179,232 @@ html.light .bg-black\/60 {
 
 html.light .eggless-logo-box {
   background-color: #ffffff !important;
-  border-color: rgba(217, 119, 6, 0.4) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  border-color: rgba(217, 119, 6, 0.35) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
 }
 
-/* Inputs & Selects in Light Mode */
-html.light input, 
+/* 5. Inputs, Selects & Search Bars */
+html.light input,
 html.light select {
   background-color: #ffffff !important;
   color: #0f172a !important;
   border-color: #cbd5e1 !important;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+}
+
+html.light input:focus,
+html.light select:focus {
+  border-color: #d97706 !important;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.15) !important;
 }
 
 html.light input::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.light kbd {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
   color: #64748b !important;
 }
 
-/* Text Colors in Light Mode */
+/* 6. Typography & Text Contrast Overrides */
 html.light .text-\[\#f0f4f8\],
 html.light .text-\[\#e6edf3\] {
   color: #0f172a !important;
 }
 
 html.light .text-\[\#94a3b8\] {
-  color: #334155 !important;
+  color: #475569 !important;
 }
 
 html.light .text-\[\#64748b\] {
   color: #64748b !important;
 }
 
-/* Amber/Yellow Text adjustments for high contrast on light backgrounds */
-html.light .text-\[\#f59e0b\],
+/* Prevent text disappearing on hover in light mode */
+html.light .group:hover .group-hover\:text-white,
+html.light .group-hover\:text-white:hover,
+html.light .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+
+/* Elements with hardcoded text-white inside light panels */
+html.light h1.text-white,
+html.light h2.text-white,
+html.light h3.text-white,
+html.light .font-bold.text-white,
+html.light span.text-white:not(.badge-container *) {
+  color: #0f172a !important;
+}
+
+/* 7. Observability Status & Telemetry Colors (High Contrast on Light) */
+html.light .text-\[\#34d399\] {
+  color: #059669 !important; /* Emerald-600 */
+}
+
+html.light .text-\[\#f87171\],
+html.light .text-\[\#fca5a5\] {
+  color: #dc2626 !important; /* Red-600 */
+}
+
 html.light .text-\[\#fbbf24\],
 html.light .text-\[\#fef08a\] {
+  color: #b45309 !important; /* Amber-700 */
+}
+
+html.light .text-\[\#c084fc\],
+html.light .text-\[\#e9d5ff\] {
+  color: #7c3aed !important; /* Violet-600 */
+}
+
+html.light .text-\[\#f59e0b\] {
+  color: #b45309 !important; /* Deep rich amber */
+}
+
+/* Status Badges & Chips */
+html.light .bg-\[\#10b981\]\/15,
+html.light .bg-\[\#10b981\]\/10 {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #059669 !important;
+}
+
+html.light .bg-\[\#ef4444\]\/15,
+html.light .bg-\[\#ef4444\]\/10,
+html.light .bg-\[\#ef4444\]\/20 {
+  background-color: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #dc2626 !important;
+}
+
+html.light .bg-\[\#f59e0b\]\/15,
+html.light .bg-\[\#f59e0b\]\/10,
+html.light .bg-\[\#f59e0b\]\/20 {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
   color: #b45309 !important;
 }
 
-/* Borders in Light Mode */
-html.light .border-\[\#20293a\] {
+html.light .bg-\[\#8b5cf6\]\/10,
+html.light .bg-\[\#8b5cf6\]\/15 {
+  background-color: #f5f3ff !important;
+  border-color: #ddd6fe !important;
+  color: #7c3aed !important;
+}
+
+/* 8. Borders & Dividing Rules */
+html.light .border-\[\#20293a\],
+html.light .border-\[\#1e2636\],
+html.light .divide-\[\#1e2636\] {
   border-color: #e2e8f0 !important;
 }
 
-/* Tables in Light Mode */
-html.light table thead {
-  background-color: #f8fafc !important;
+html.light .border-\[\#20293a\]\/80 {
   border-color: #e2e8f0 !important;
+}
+
+html.light .border-\[\#2d384e\],
+html.light .border-\[\#334155\] {
+  border-color: #cbd5e1 !important;
+}
+
+/* 9. High-Contrast Observability Tables */
+html.light table thead,
+html.light table thead.bg-\[\#161e2c\] {
+  background-color: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
 }
 
 html.light table th {
   color: #475569 !important;
   border-color: #e2e8f0 !important;
+  font-weight: 600 !important;
 }
 
 html.light table tbody tr {
   border-color: #f1f5f9 !important;
+  background-color: #ffffff;
 }
 
 html.light table tbody tr:hover {
   background-color: #f8fafc !important;
 }
 
-/* Cards with specialized dark backgrounds */
+/* 10. KPI Summary Cards */
 html.light .bg-\[\#1a1215\] {
   background-color: #fef2f2 !important;
-  border-color: #fca5a5 !important;
+  border-color: #fecaca !important;
 }
+
 html.light .bg-\[\#1a1712\] {
   background-color: #fffbeb !important;
   border-color: #fde68a !important;
 }
+
 html.light .bg-\[\#180e12\] {
   background-color: #fff1f2 !important;
   border-color: #fecdd3 !important;
 }
 
-/* Code & Pre Blocks in Light Mode */
-html.light pre, 
+/* 11. Code Blocks & Inset Metadata in Drawers */
+html.light pre,
 html.light code {
   background-color: #f8fafc !important;
   color: #0f172a !important;
   border-color: #e2e8f0 !important;
 }
 
-/* Custom Scrollbar */
+/* 12. Live Terminal & Log Stream (Light Developer Console) */
+html.light .bg-\[\#070a0f\] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -2px rgba(15, 23, 42, 0.05) !important;
+}
+
+html.light .bg-\[\#0e131d\] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* 13. Sidebar Navigation Active States (Modern Enterprise Linear/Datadog style) */
+html.light aside a.bg-\[\#1c273a\] {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+html.light aside a.bg-\[\#1c273a\] svg {
+  color: #0f172a !important;
+  opacity: 1 !important;
+}
+
+html.light aside a:not(.bg-\[\#1c273a\]) {
+  color: #475569 !important;
+}
+
+html.light aside a:not(.bg-\[\#1c273a\]):hover {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* 14. Chart Visualization & Progress Bars */
+html.light .h-40 .bg-\[\#1c273a\] {
+  background-color: #e2e8f0 !important;
+}
+
+html.light .h-2.bg-\[\#161e2c\] {
+  background-color: #e2e8f0 !important;
+}
+
+/* Keep floating chart tooltips dark for crisp readability */
+html.light .h-40 .absolute.bg-\[\#0b0e14\] {
+  background-color: #0f172a !important;
+  border-color: #334155 !important;
+  color: #ffffff !important;
+}
+
+/* 15. Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -250,7 +428,11 @@ html.light ::-webkit-scrollbar-thumb {
   border-radius: 3px;
 }
 
-/* Badges */
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* 16. Badges & Indicators */
 .eggless-badge {
   display: inline-flex;
   align-items: center;

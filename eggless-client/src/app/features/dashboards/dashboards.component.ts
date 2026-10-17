@@ -160,18 +160,18 @@ import { LogService } from '../../core/services/log.service';
       <div *ngIf="showAddWidgetModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
         <div class="bg-[#151b26] border border-[#20293a] rounded-lg w-full max-w-md p-5 text-xs space-y-4">
           <div class="flex items-center justify-between border-b border-[#20293a] pb-3">
-            <h3 class="text-sm font-bold text-white">Add Custom Dashboard Widget</h3>
-            <button (click)="showAddWidgetModal = false" class="text-[#64748b] hover:text-white">✕</button>
+            <h3 class="text-sm font-bold text-[#f0f4f8]">Add Custom Dashboard Widget</h3>
+            <button (click)="showAddWidgetModal = false" class="text-[#64748b] hover:text-[#f0f4f8]">✕</button>
           </div>
 
           <div>
             <label class="block text-[#64748b] font-semibold mb-1">Widget Title</label>
-            <input type="text" placeholder="e.g. Stripe Errors Count" class="w-full bg-[#111622] text-white p-2 rounded border border-[#20293a]" />
+            <input type="text" placeholder="e.g. Stripe Errors Count" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a]" />
           </div>
 
           <div>
             <label class="block text-[#64748b] font-semibold mb-1">Widget Metric Type</label>
-            <select class="w-full bg-[#111622] text-white p-2 rounded border border-[#20293a]">
+            <select class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a]">
               <option>Log Count Over Time</option>
               <option>Error Count Over Time</option>
               <option>Logs by Application</option>
@@ -181,7 +181,7 @@ import { LogService } from '../../core/services/log.service';
           </div>
 
           <div class="flex items-center justify-end gap-2 pt-2 border-t border-[#20293a]">
-            <button (click)="showAddWidgetModal = false" class="px-3 py-1.5 bg-[#161e2c] text-white rounded">Cancel</button>
+            <button (click)="showAddWidgetModal = false" class="px-3 py-1.5 bg-[#161e2c] text-[#e6edf3] border border-[#20293a] rounded hover:bg-[#1f293d]">Cancel</button>
             <button (click)="showAddWidgetModal = false" class="px-3 py-1.5 bg-[#f59e0b] text-[#0b0e14] font-bold rounded">Add Widget</button>
           </div>
         </div>

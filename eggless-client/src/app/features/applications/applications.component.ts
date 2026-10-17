@@ -47,8 +47,10 @@ import { ApplicationInfo } from '../../core/models/log.model';
               class="hover:bg-[#1a2332] cursor-pointer transition-colors group"
             >
               <td class="py-3.5 px-4 font-bold text-[#f0f4f8] font-sans flex items-center gap-2">
-                <div class="w-7 h-7 rounded bg-[#1c273a] flex items-center justify-center text-base border border-[#20293a]">
-                  📦
+                <div class="w-7 h-7 rounded bg-[#1c273a] flex items-center justify-center text-[#94a3b8] border border-[#20293a]">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                  </svg>
                 </div>
                 <div>
                   <div class="text-[#f59e0b] group-hover:underline font-mono text-xs">{{ app.name }}</div>
@@ -113,7 +115,7 @@ import { ApplicationInfo } from '../../core/models/log.model';
           <div class="flex items-center gap-3">
             <button
               (click)="selectedApp = null"
-              class="p-1.5 rounded bg-[#161e2c] border border-[#20293a] text-[#94a3b8] hover:text-white transition-colors"
+              class="p-1.5 rounded bg-[#161e2c] border border-[#20293a] text-[#94a3b8] hover:text-[#f0f4f8] transition-colors"
             >
               ← Back to Applications
             </button>
@@ -217,7 +219,7 @@ import { ApplicationInfo } from '../../core/models/log.model';
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-[#64748b] font-semibold mb-1">Ingestion Log Level</label>
-                <select class="w-full bg-[#161e2c] text-white p-2 rounded border border-[#20293a]">
+                <select class="w-full bg-[#161e2c] text-[#f0f4f8] p-2 rounded border border-[#20293a]">
                   <option>INFO (Default)</option>
                   <option>WARN</option>
                   <option>ERROR</option>
@@ -226,7 +228,7 @@ import { ApplicationInfo } from '../../core/models/log.model';
               </div>
               <div>
                 <label class="block text-[#64748b] font-semibold mb-1">Retention Window</label>
-                <select class="w-full bg-[#161e2c] text-white p-2 rounded border border-[#20293a]">
+                <select class="w-full bg-[#161e2c] text-[#f0f4f8] p-2 rounded border border-[#20293a]">
                   <option>30 Days Hot Storage</option>
                   <option>90 Days Cold Archive</option>
                 </select>

@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: eggless-observability
+
+  # Database Configuration:
+  # Defaults to embedded persistent file-based H2 in ~/.eggless/data/egglessdb
+  # Easily shift to PostgreSQL or MySQL by setting DB_URL, DB_USERNAME, DB_PASSWORD
+  datasource:
+    url: ${DB_URL:jdbc:h2:file:${EGGLESS_HOME:${user.home}/.eggless}/data/egglessdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+    driver-class-name: ${DB_DRIVER:}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: ${DDL_AUTO:update}
+    properties:
+      hibernate:
+        format_sql: false
+
+  h2:
+    console:
+      enabled: ${H2_CONSOLE_ENABLED:true}
+      path: /h2-console
+      settings:
+        web-allow-others: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  compression:
+    enabled: true
+    mime-types: text/html,text/css,text/plain,application/javascript,text/javascript,application/json,image/svg+xml
+    min-response-size: 1024
+
+# Portal SSO Integration Configuration
+portal:
+  sso:
+    base-url: ${PORTAL_BASE_URL:https://portal.tanmaysinghx.com}
+    application-id: ${PORTAL_APP_ID:3fa85f64-5717-4562-b3fc-2c963f66afa6}
+    app-key: ${PORTAL_APP_KEY:}
+    client-id: ${PORTAL_CLIENT_ID:eggless-observability}
+    redirect-uri: ${PORTAL_REDIRECT_URI:http://localhost:8080/auth/callback}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

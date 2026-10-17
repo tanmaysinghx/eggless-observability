@@ -39,7 +39,7 @@ import { LogEntry } from '../../../core/models/log.model';
           <button
             (click)="autoScroll = !autoScroll"
             [ngClass]="autoScroll ? 'text-[#34d399]' : 'text-[#64748b]'"
-            class="px-2 py-1 rounded bg-[#161e2c] border border-[#20293a] hover:text-white transition-colors text-[11px]"
+            class="px-2 py-1 rounded bg-[#161e2c] border border-[#20293a] hover:text-[#f0f4f8] transition-colors text-[11px]"
             title="Auto-scroll on new logs"
           >
             Auto-scroll: {{ autoScroll ? 'ON' : 'OFF' }}

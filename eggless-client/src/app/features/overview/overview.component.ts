@@ -31,7 +31,7 @@ import { LogService } from '../../core/services/log.service';
             routerLink="/logs"
             class="px-4 py-2 bg-[#f59e0b] hover:bg-[#d97706] text-[#0b0e14] font-bold rounded-md transition-all text-xs shadow-md shadow-[#f59e0b]/20 flex items-center gap-2"
           >
-            Launch Log Explorer Hero →
+            Launch Logs Explorer →
           </a>
         </div>
       </div>
@@ -94,17 +94,17 @@ import { LogService } from '../../core/services/log.service';
 
           <div class="space-y-2">
             <a routerLink="/logs" class="block p-3 bg-[#161e2c] hover:bg-[#1f293d] rounded-md border border-[#20293a] transition-colors">
-              <div class="font-bold text-[#f59e0b]">⚡ Logs Explorer (Hero Feature)</div>
+              <div class="font-bold text-[#f59e0b]">Logs Explorer</div>
               <div class="text-[#94a3b8] text-[11px] mt-0.5">High-density log table, query filters, live tail stream, JSON drawer.</div>
             </a>
 
             <a routerLink="/dashboards" class="block p-3 bg-[#161e2c] hover:bg-[#1f293d] rounded-md border border-[#20293a] transition-colors">
-              <div class="font-bold text-[#f0f4f8]">📊 Visual Dashboards</div>
+              <div class="font-bold text-[#f0f4f8]">Visual Dashboards</div>
               <div class="text-[#94a3b8] text-[11px] mt-0.5">Log volume charts, error rate percentage, and level distribution.</div>
             </a>
 
             <a routerLink="/alerts" class="block p-3 bg-[#161e2c] hover:bg-[#1f293d] rounded-md border border-[#20293a] transition-colors">
-              <div class="font-bold text-[#f0f4f8]">🔔 Alert Rules & Triggers</div>
+              <div class="font-bold text-[#f0f4f8]">Alert Rules & Triggers</div>
               <div class="text-[#94a3b8] text-[11px] mt-0.5">Manage automated log condition monitors and notifications.</div>
             </a>
           </div>

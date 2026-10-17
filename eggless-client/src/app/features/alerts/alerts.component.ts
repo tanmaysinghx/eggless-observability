@@ -94,20 +94,20 @@ import { AlertRule } from '../../core/models/log.model';
       <div *ngIf="showCreateModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
         <div class="bg-[#151b26] border border-[#20293a] rounded-lg w-full max-w-lg p-6 text-xs space-y-4 shadow-2xl">
           <div class="flex items-center justify-between border-b border-[#20293a] pb-3">
-            <h3 class="text-sm font-bold text-white">Create New Alert Rule</h3>
-            <button (click)="showCreateModal = false" class="text-[#64748b] hover:text-white font-bold">✕</button>
+            <h3 class="text-sm font-bold text-[#f0f4f8]">Create New Alert Rule</h3>
+            <button (click)="showCreateModal = false" class="text-[#64748b] hover:text-[#f0f4f8] font-bold">✕</button>
           </div>
 
           <div class="space-y-3 font-sans">
             <div>
               <label class="block text-[#64748b] font-semibold mb-1">Alert Rule Name</label>
-              <input [(ngModel)]="newRule.name" type="text" placeholder="e.g. High Payment Errors" class="w-full bg-[#111622] text-white p-2 rounded border border-[#20293a]" />
+              <input [(ngModel)]="newRule.name" type="text" placeholder="e.g. High Payment Errors" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a]" />
             </div>
 
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block text-[#64748b] font-semibold mb-1">Target Application</label>
-                <select [(ngModel)]="newRule.application" class="w-full bg-[#111622] text-white p-2 rounded border border-[#20293a] font-mono">
+                <select [(ngModel)]="newRule.application" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a] font-mono">
                   <option value="payment-api">payment-api</option>
                   <option value="order-service">order-service</option>
                   <option value="auth-service">auth-service</option>
@@ -119,7 +119,7 @@ import { AlertRule } from '../../core/models/log.model';
 
               <div>
                 <label class="block text-[#64748b] font-semibold mb-1">Evaluation Window</label>
-                <select [(ngModel)]="newRule.window" class="w-full bg-[#111622] text-white p-2 rounded border border-[#20293a]">
+                <select [(ngModel)]="newRule.window" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a]">
                   <option value="1m">1 Minute</option>
                   <option value="5m">5 Minutes</option>
                   <option value="15m">15 Minutes</option>
@@ -129,17 +129,17 @@ import { AlertRule } from '../../core/models/log.model';
 
             <div>
               <label class="block text-[#64748b] font-semibold mb-1">Log Search Query</label>
-              <input [(ngModel)]="newRule.query" type="text" placeholder='e.g. level:ERROR "timeout"' class="w-full bg-[#111622] text-white p-2 rounded border border-[#20293a] font-mono" />
+              <input [(ngModel)]="newRule.query" type="text" placeholder='e.g. level:ERROR "timeout"' class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a] font-mono" />
             </div>
 
             <div>
               <label class="block text-[#64748b] font-semibold mb-1">Trigger Threshold Condition</label>
-              <input [(ngModel)]="newRule.condition" type="text" placeholder="e.g. ERROR > 50 logs in 5 minutes" class="w-full bg-[#111622] text-white p-2 rounded border border-[#20293a]" />
+              <input [(ngModel)]="newRule.condition" type="text" placeholder="e.g. ERROR > 50 logs in 5 minutes" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a]" />
             </div>
 
             <div>
               <label class="block text-[#64748b] font-semibold mb-1">Notification Channel</label>
-              <select [(ngModel)]="newRule.channel" class="w-full bg-[#111622] text-white p-2 rounded border border-[#20293a]">
+              <select [(ngModel)]="newRule.channel" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a]">
                 <option value="#alerts-payments (Slack)">#alerts-payments (Slack)</option>
                 <option value="PagerDuty (On-Call)">PagerDuty (On-Call)</option>
                 <option value="#security-ops">#security-ops</option>

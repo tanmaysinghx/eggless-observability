@@ -1,40 +1,126 @@
 <div align="center">
   <img src="eggless-client/public/eggless-logo.png" width="120" alt="Eggless Logo" />
-  <h1>🥚 Eggless — Open-Source SaaS Application Logs & Observability</h1>
-  <p><b>High-Performance Go Backend, High-Density Developer UI & Plug-and-Play Multi-Language SDKs</b></p>
+  <h1>🥚 Eggless Observability</h1>
+  <p><b>Free, Open-Source Application Telemetry & Log Observability Platform in a Single Executable JAR</b></p>
 
-  [![Go Version](https://img.shields.io/badge/Go-1.22%2B-00ADD8?style=flat-square&logo=go)](https://go.dev)
-  [![Java / Spring Boot](https://img.shields.io/badge/Java-17%2F25-007396?style=flat-square&logo=openjdk)](https://openjdk.org)
+  [![Java / Spring Boot](https://img.shields.io/badge/Java-25-007396?style=flat-square&logo=openjdk)](https://openjdk.org)
+  [![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-6DB33F?style=flat-square&logo=springboot)](https://spring.io)
   [![Angular](https://img.shields.io/badge/Angular-21.0-DD0031?style=flat-square&logo=angular)](https://angular.dev)
+  [![H2 / PostgreSQL / MySQL](https://img.shields.io/badge/Databases-H2%20|%20Postgres%20|%20MySQL-blue?style=flat-square)](https://h2database.com)
   [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 </div>
 
 ---
 
-## 🚀 Quickstart (Plug & Play)
+## 🌟 Overview
 
-### Option 1: Run Go Backend Standalone (No External DB Needed!)
-```bash
-cd eggless-server
-go run main.go
-```
-The Go server automatically starts on `http://localhost:8080` with native REST APIs, Live Log Generator, and WebSockets!
+**Eggless Observability** is designed from the ground up for open-source developers and engineering teams who need a **free, beautiful, enterprise-grade observability platform** for their applications without the complexity of configuring Elasticsearch, ClickHouse, or external SaaS providers.
 
-### Option 2: Run with Docker Compose
-```bash
-docker compose up -d
-```
-Access the Angular UI at `http://localhost:4200` and Go API at `http://localhost:8080`.
+- **Single Executable JAR**: Frontend UI (Angular 21) and Backend (Spring Boot) packaged together into one runnable artifact (`eggless-observability.jar`).
+- **Zero-Setup Embedded Database**: Boots out-of-the-box using an embedded, persistent **H2 database** stored in `~/.eggless/data/`.
+- **Easy Shift to Your Own Database**: Switch to **PostgreSQL** or **MySQL** simply by passing environment variables.
+- **Portal SSO Ready**: Out-of-the-box support for centralized OAuth 2.1 / OIDC PKCE single sign-on and External Auth REST API.
+- **Real-Time Live Tail**: Instant WebSocket log streaming and search.
+- **Multi-Language SDKs**: Native Java/Spring Boot starter, Logback appender, and REST ingestion.
 
 ---
 
-## 🔌 SDKs & Framework Integrations
+## 🚀 Quickstart (Under 10 Seconds)
 
-Eggless Observability provides native SDKs and log appenders for popular tech stacks:
+### 1. Run the Single Standalone JAR
+```bash
+java -jar eggless-observability.jar
+```
+That's it! Open your browser:
+👉 **[http://localhost:8080](http://localhost:8080)**
 
-### ☕ 1. Java & Spring Boot (`eggless-sdk-java`)
+The platform initializes the database in `~/.eggless/data/`, seeds sample application telemetry, starts the real-time log ingestion engine, and serves the Angular UI.
 
-Add the dependency to your `pom.xml`:
+---
+
+## 🗄️ Database Setup (From Embedded H2 to Your Choice)
+
+### Option A: Default Embedded H2 (Persistent & Zero Setup)
+No configuration required! Logs and settings automatically persist in:
+```
+~/.eggless/data/egglessdb.mv.db
+```
+
+### Option B: Shift to PostgreSQL
+To point Eggless to an external PostgreSQL instance:
+```bash
+export DB_URL="jdbc:postgresql://localhost:5432/eggless"
+export DB_USERNAME="postgres"
+export DB_PASSWORD="your_password"
+
+java -jar eggless-observability.jar
+```
+
+### Option C: Shift to MySQL
+To point Eggless to an external MySQL instance:
+```bash
+export DB_URL="jdbc:mysql://localhost:3306/eggless"
+export DB_USERNAME="root"
+export DB_PASSWORD="your_password"
+
+java -jar eggless-observability.jar
+```
+
+---
+
+## 🐳 Docker & Docker Compose
+
+Run with Docker Compose:
+```bash
+docker compose up -d
+```
+Access the console at **`http://localhost:8080`**. Data is persisted in a named volume (`eggless-data`).
+
+---
+
+## 🛠️ Building From Source
+
+To compile the Angular frontend and Spring Boot server into the standalone executable JAR:
+
+### On Linux / macOS:
+```bash
+./build.sh
+```
+
+### On Windows:
+```cmd
+build.bat
+```
+
+The resulting artifact is placed at:
+```
+./eggless-observability.jar
+```
+
+---
+
+## 🔐 Portal SSO Integration
+
+Eggless Observability integrates seamlessly with **Portal SSO** for both interactive browser single sign-on and programmatic agent authentication:
+
+```bash
+export PORTAL_BASE_URL="https://portal.tanmaysinghx.com"
+export PORTAL_APP_ID="3fa85f64-5717-4562-b3fc-2c963f66afa6"
+export PORTAL_APP_KEY="prtl_key_..."
+export PORTAL_CLIENT_ID="eggless-observability"
+
+java -jar eggless-observability.jar
+```
+
+- **Interactive SSO**: Sign in via OAuth 2.1 PKCE (`/oauth2/authorize`).
+- **External Auth REST API**: Direct headless user login and registration (`/api/auth/login`, `/api/auth/register`).
+
+---
+
+## 🔌 Ingestion & SDKs
+
+### Java & Spring Boot (`eggless-spring-boot-starter`)
+Add dependency to `pom.xml`:
 ```xml
 <dependency>
     <groupId>io.eggless</groupId>
@@ -43,132 +129,30 @@ Add the dependency to your `pom.xml`:
 </dependency>
 ```
 
-Add configuration in `application.yml`:
+Add configuration to `application.yml`:
 ```yaml
 eggless:
   enabled: true
   server-url: http://localhost:8080
-  api-key: egg_live_998877665544332211
+  api-key: egg_sec_...
   service-name: order-service
   environment: production
 ```
 
-Logback XML integration (`logback-spring.xml`):
-```xml
-<appender name="EGGLESS" class="io.eggless.sdk.logback.EgglessLogbackAppender">
-    <serverUrl>http://localhost:8080</serverUrl>
-    <apiKey>egg_live_998877665544332211</apiKey>
-    <serviceName>order-service</serviceName>
-</appender>
-```
-*Features*: Automatic MDC `traceId` propagation, Servlet Filter HTTP status/duration recording, and `@RestControllerAdvice` exception stack trace capture.
-
----
-
-### 🐹 2. Go Apps (`log/slog` & `zap`)
-
-```go
-package main
-
-import (
-    "log/slog"
-    "net/http"
-    "bytes"
-)
-
-func main() {
-    // Ship logs via HTTP JSON to Eggless Ingestion API
-    body := []byte(`{"service":"payment-api","level":"INFO","message":"Payment completed","traceId":"tr-9921"}`)
-    http.Post("http://localhost:8080/api/v1/logs/ingest", "application/json", bytes.NewBuffer(body))
-}
-```
-
----
-
-### 🟢 3. Node.js & TypeScript (`Winston` / `Pino` / `Express`)
-
-```javascript
-const winston = require('winston');
-const http = require('http');
-
-const logger = winston.createLogger({
-  level: 'info',
-  transports: [
-    new winston.transports.Console()
-  ]
-});
-
-// Post log event to Eggless Server
-function logToEggless(level, message, metadata) {
-  const req = http.request('http://localhost:8080/api/v1/logs/ingest', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-API-Key': 'egg_live_...' }
-  });
-  req.write(JSON.stringify({ service: 'auth-service', level, message, metadata }));
-  req.end();
-}
-```
-
----
-
-### 🦀 4. Rust (`tracing` Crate)
-
-```rust
-// Axum / Actix-web tracing layer
-let payload = serde_json::json!({
-    "service": "auth-service",
-    "level": "INFO",
-    "message": "User authenticated successfully",
-    "traceId": "tr-rust-001"
-});
-```
-
----
-
-### 🐳 5. Universal Vector / Docker / FluentBit / OpenTelemetry (OTLP)
-For zero code changes, direct container logs from Docker or Vector forwarders to `http://localhost:8080/api/v1/logs/ingest`.
-
----
-
-## 📥 Instant Log Ingestion API Examples
-
-Send logs to Eggless from any application, microservice, shell script, or CI/CD pipeline using a single `curl` request:
-
-### Ingest Single Log
+### Direct HTTP REST Ingestion (Any Language / Collector)
 ```bash
-curl -X POST http://localhost:8080/api/v1/logs/ingest \
-  -H "X-API-Key: egg_live_998877665544332211" \
+curl -X POST "http://localhost:8080/api/v1/logs" \
   -H "Content-Type: application/json" \
   -d '{
-    "service": "payment-api",
-    "level": "ERROR",
-    "message": "Stripe Gateway HTTP 504 Gateway Timeout",
+    "service": "billing-service",
+    "level": "INFO",
     "environment": "production",
-    "traceId": "tr-99812a4b",
-    "userId": "usr-12345",
-    "metadata": {
-      "errorCode": "STRIPE_TIMEOUT",
-      "retryCount": 3,
-      "amount": 149.99
-    },
-    "stackTrace": "StripeException: GatewayTimeoutException at PaymentClient.java:142\n  at com.eggless.payment.StripeService.charge(StripeService.java:88)"
+    "message": "Payment processed successfully for customer #4910",
+    "traceId": "trc_9982a17f",
+    "host": "k8s-pod-7a",
+    "metadata": { "amount": 99.00, "currency": "USD" }
   }'
 ```
-
----
-
-## 📡 REST API Reference
-
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/api/v1/health` | `GET` | Server health status & engine telemetry |
-| `/api/v1/logs` | `GET` | Query logs with filters (`level`, `service`, `searchQuery`, `timeRange`) |
-| `/api/v1/logs/ingest` | `POST` | Ingest single or batch log payload |
-| `/api/v1/logs/stream` | `WS` | Real-time live log tailing WebSocket connection |
-| `/api/v1/applications` | `GET` | Application health, uptime, and logs/min rates |
-| `/api/v1/alerts` | `GET / POST` | Query & create automated alert rules |
-| `/api/v1/alerts/toggle` | `PUT` | Enable/disable alert rules |
-| `/api/v1/apikeys` | `GET / POST` | List & generate ingestion API keys |
 
 ---
 

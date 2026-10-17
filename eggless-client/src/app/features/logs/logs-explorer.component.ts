@@ -156,7 +156,11 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
             <div class="text-[10px] text-[#64748b] font-semibold uppercase tracking-wider">Total Logs</div>
             <div class="text-base font-bold text-[#f0f4f8] font-mono mt-0.5">{{ stats.totalLogs | number }}</div>
           </div>
-          <div class="w-7 h-7 rounded bg-[#1c273a] flex items-center justify-center text-[#f0f4f8]">📊</div>
+          <div class="w-7 h-7 rounded bg-[#1c273a] flex items-center justify-center text-[#94a3b8]">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
         </div>
 
         <div class="p-2.5 bg-[#1a1215] border border-[#ef4444]/30 rounded-md flex items-center justify-between">
@@ -164,7 +168,11 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
             <div class="text-[10px] text-[#f87171] font-semibold uppercase tracking-wider">Errors</div>
             <div class="text-base font-bold text-[#f87171] font-mono mt-0.5">{{ stats.errorCount | number }}</div>
           </div>
-          <div class="w-7 h-7 rounded bg-[#ef4444]/20 flex items-center justify-center text-[#f87171] font-mono font-bold">!</div>
+          <div class="w-7 h-7 rounded bg-[#ef4444]/20 flex items-center justify-center text-[#f87171]">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
         </div>
 
         <div class="p-2.5 bg-[#1a1712] border border-[#f59e0b]/30 rounded-md flex items-center justify-between">
@@ -172,7 +180,11 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
             <div class="text-[10px] text-[#fbbf24] font-semibold uppercase tracking-wider">Warnings</div>
             <div class="text-base font-bold text-[#fbbf24] font-mono mt-0.5">{{ stats.warnCount | number }}</div>
           </div>
-          <div class="w-7 h-7 rounded bg-[#f59e0b]/20 flex items-center justify-center text-[#fbbf24] font-mono font-bold">⚠</div>
+          <div class="w-7 h-7 rounded bg-[#f59e0b]/20 flex items-center justify-center text-[#fbbf24]">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
         </div>
 
         <div class="p-2.5 bg-[#121722] border border-[#20293a] rounded-md flex items-center justify-between">
@@ -180,7 +192,11 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
             <div class="text-[10px] text-[#64748b] font-semibold uppercase tracking-wider">Active Apps</div>
             <div class="text-base font-bold text-[#34d399] font-mono mt-0.5">{{ stats.activeApplications }} microservices</div>
           </div>
-          <div class="w-7 h-7 rounded bg-[#10b981]/20 flex items-center justify-center text-[#34d399]">⚡</div>
+          <div class="w-7 h-7 rounded bg-[#10b981]/20 flex items-center justify-center text-[#34d399]">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
         </div>
       </div>
 
@@ -270,7 +286,7 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
 
                   <td *ngIf="isColumnVisible('message')" class="py-2 px-3">
                     <div
-                      class="truncate max-w-xl font-mono text-[#f0f4f8] group-hover:text-white"
+                      class="truncate max-w-xl font-mono text-[#f0f4f8]"
                       [ngClass]="{
                         'text-[#f87171]': log.level === 'ERROR',
                         'text-[#fbbf24]': log.level === 'WARN'
@@ -291,10 +307,12 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
                   <td class="py-2 px-2 text-center" (click)="$event.stopPropagation()">
                     <button
                       (click)="copyLogMessage(log)"
-                      class="text-[#64748b] hover:text-[#f59e0b] p-1 rounded hover:bg-[#20293a]"
+                      class="text-[#64748b] hover:text-[#f59e0b] p-1 rounded hover:bg-[#20293a] flex items-center justify-center mx-auto"
                       title="Copy Log Message"
                     >
-                      📋
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
                     </button>
                   </td>
                 </tr>
@@ -311,9 +329,9 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
           <!-- Pagination Bar -->
           <div class="h-10 px-4 bg-[#161e2c] border-t border-[#20293a] flex items-center justify-between text-xs text-[#94a3b8] shrink-0 font-sans">
             <div>
-              Showing <span class="font-semibold text-white font-mono">{{ getStartIndex() }}</span> -
-              <span class="font-semibold text-white font-mono">{{ getEndIndex() }}</span> of
-              <span class="font-semibold text-white font-mono">{{ totalFilteredLogs }}</span> logs
+              Showing <span class="font-semibold text-[#f0f4f8] font-mono">{{ getStartIndex() }}</span> -
+              <span class="font-semibold text-[#f0f4f8] font-mono">{{ getEndIndex() }}</span> of
+              <span class="font-semibold text-[#f0f4f8] font-mono">{{ totalFilteredLogs }}</span> logs
             </div>
 
             <div class="flex items-center gap-2">
