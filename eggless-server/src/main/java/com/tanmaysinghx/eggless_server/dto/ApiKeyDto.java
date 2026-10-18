@@ -19,4 +19,5 @@ public class ApiKeyDto {
     private String created;
     private String lastUsed;
     private String status;
+    private String application; // null = may send logs for any application
 }

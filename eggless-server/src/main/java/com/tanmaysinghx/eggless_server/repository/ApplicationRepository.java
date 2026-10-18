@@ -9,4 +9,5 @@ import java.util.Optional;
 @Repository
 public interface ApplicationRepository extends JpaRepository<ApplicationEntity, String> {
     Optional<ApplicationEntity> findByName(String name);
+    boolean existsByNameIgnoreCase(String name);
 }

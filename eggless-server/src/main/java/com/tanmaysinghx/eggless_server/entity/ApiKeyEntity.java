@@ -33,6 +33,10 @@ public class ApiKeyEntity {
 
     private Instant lastUsedAt;
 
+    /** When set, the key may only send logs for this application (service name). */
+    @Column(length = 64)
+    private String application;
+
     @Column(length = 16)
     private String status; // active, revoked
 

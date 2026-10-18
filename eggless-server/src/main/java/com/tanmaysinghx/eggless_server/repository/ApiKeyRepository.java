@@ -11,4 +11,5 @@ import java.util.Optional;
 public interface ApiKeyRepository extends JpaRepository<ApiKeyEntity, String> {
     List<ApiKeyEntity> findAllByOrderByCreatedAtDesc();
     Optional<ApiKeyEntity> findByTokenHash(String tokenHash);
+    List<ApiKeyEntity> findByApplication(String application);
 }

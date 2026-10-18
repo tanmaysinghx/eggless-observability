@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, combineLatest, interval, of, throwError, timer } from 'rxjs';
 import { map, catchError, debounceTime, distinctUntilChanged, retry, shareReplay, startWith, switchMap } from 'rxjs/operators';
-import { LogEntry, LogFilter, LogStats, ApplicationInfo, AlertRule, ApiKey, Environment, LogLevel, MetricsSummary, SystemInfo } from '../models/log.model';
+import { LogEntry, LogFilter, LogStats, ApplicationInfo, ApplicationRegistration, AlertRule, ApiKey, Environment, LogLevel, MetricsSummary, NewApplication, SystemInfo } from '../models/log.model';
 import { matchesQuery, parseQuery } from './log-query';
 
 @Injectable({
@@ -182,9 +182,65 @@ export class LogService {
   /** Logs matching the current filters (already filtered by the server). */
   public filteredLogs$: Observable<LogEntry[]> = this.logs$;
 
+  /** Re-fetches the application list now instead of waiting for the next 15s poll. */
+  public refreshApplications() {
+    this.fetchApplications();
+  }
+
+  /** Re-fetches API keys, e.g. to show an up-to-date "last used". */
+  public refreshApiKeys() {
+    this.fetchApiKeys();
+  }
+
+  /** Registers an application and returns it with its bound ingestion key (token shown once). */
+  public registerApplication(app: NewApplication): Observable<ApplicationRegistration> {
+    return this.http.post<any>(`${this.apiBase}/applications`, app).pipe(
+      map(res => {
+        this.fetchApplications();
+        this.fetchApiKeys();
+        return res.data as ApplicationRegistration;
+      }),
+      catchError(err => throwError(() => new Error(err?.error?.error || 'Failed to register application')))
+    );
+  }
+
+  /** Issues another ingestion key for an application, e.g. to rotate a lost one. */
+  public createApplicationKey(appId: string): Observable<ApiKey> {
+    return this.http.post<any>(`${this.apiBase}/applications/${encodeURIComponent(appId)}/keys`, {}).pipe(
+      map(res => {
+        this.fetchApiKeys();
+        return res.data as ApiKey;
+      }),
+      catchError(err => throwError(() => new Error(err?.error?.error || 'Failed to create key')))
+    );
+  }
+
+  public deleteApplication(appId: string): Observable<void> {
+    return this.http.delete<any>(`${this.apiBase}/applications/${encodeURIComponent(appId)}`).pipe(
+      map(() => {
+        this.fetchApplications();
+        this.fetchApiKeys();
+      }),
+      catchError(err => throwError(() => new Error(err?.error?.error || 'Failed to delete application')))
+    );
+  }
+
+  /** Sends one log with the given key, as the application itself would. */
+  public sendTestLog(token: string, environment: string): Observable<LogEntry> {
+    return this.http.post<any>(`${this.apiBase}/logs`,
+      { level: 'INFO', environment, message: 'Hello from Eggless: test log sent from the setup screen' },
+      { headers: { 'X-API-Key': token } }
+    ).pipe(
+      map(res => res.data as LogEntry),
+      catchError(err => throwError(() => new Error(err?.error?.error || 'Test log was rejected')))
+    );
+  }
+
   /** The newest logs of one application, independent of the explorer filters. */
-  public recentLogs(service: string, limit = 25): Observable<LogEntry[]> {
-    return this.http.get<any>(`${this.apiBase}/logs`, { params: { service, limit: String(limit) } }).pipe(
+  public recentLogs(service: string, limit = 25, level?: string): Observable<LogEntry[]> {
+    const params: Record<string, string> = { service, limit: String(limit) };
+    if (level && level !== 'all') params['level'] = level;
+    return this.http.get<any>(`${this.apiBase}/logs`, { params }).pipe(
       map(res => (res && res.data ? res.data.logs as LogEntry[] : [])),
       catchError(() => of([]))
     );

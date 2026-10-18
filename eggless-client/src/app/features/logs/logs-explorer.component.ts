@@ -25,13 +25,8 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
             (ngModelChange)="onAppSelect($event)"
             class="h-7 px-2 bg-[#161e2c] text-[#e6edf3] text-xs rounded border border-[#20293a] focus:outline-none focus:border-[#f59e0b] font-medium font-mono cursor-pointer"
           >
-            <option value="all">Applications: All (6)</option>
-            <option value="payment-api">payment-api</option>
-            <option value="order-service">order-service</option>
-            <option value="auth-service">auth-service</option>
-            <option value="frontend">frontend</option>
-            <option value="notification-service">notification-service</option>
-            <option value="db-proxy">db-proxy</option>
+            <option value="all">Applications: All ({{ (apps$ | async)?.length ?? 0 }})</option>
+            <option *ngFor="let app of (apps$ | async)" [value]="app.name">{{ app.name }}</option>
           </select>
 
           <!-- Environment Selector Dropdown -->
@@ -386,6 +381,7 @@ export class LogsExplorerComponent implements OnInit {
   liveTail$ = this.logService.liveTail$;
   selectedApp$ = this.logService.selectedApp$;
   selectedEnv$ = this.logService.selectedEnv$;
+  apps$ = this.logService.applications$;
 
   viewMode: 'table' | 'terminal' = 'table';
   searchQuery = '';

@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LogService } from '../../core/services/log.service';
@@ -158,6 +158,8 @@ import { AlertRule } from '../../core/models/log.model';
 })
 export class AlertsComponent {
   private logService = inject(LogService);
+  // Zoneless app: state set in HTTP callbacks needs an explicit markForCheck to render.
+  private cdr = inject(ChangeDetectorRef);
 
   alerts$ = this.logService.alerts$;
   apps$ = this.logService.applications$;
@@ -187,8 +189,12 @@ export class AlertsComponent {
       next: () => {
         this.showCreateModal = false;
         this.newRule = { ...this.newRule, name: '' };
+        this.cdr.markForCheck();
       },
-      error: (err: Error) => this.createError = err.message
+      error: (err: Error) => {
+        this.createError = err.message;
+        this.cdr.markForCheck();
+      }
     });
   }
 }

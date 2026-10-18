@@ -40,4 +40,6 @@ public class ApplicationEntity {
     private String description;
 
     private Instant lastSeen;
+
+    private Instant createdAt;
 }

@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -223,6 +223,7 @@ import { ApiKey } from '../../core/models/log.model';
               <tr *ngFor="let key of (apiKeys$ | async)" class="hover:bg-slate-50 dark:hover:bg-[#1a2332] transition-colors">
                 <td class="py-3.5 px-4 font-bold text-slate-900 dark:text-[#f0f4f8] font-sans">
                   {{ key.name }}
+                  <span class="block text-[10px] font-normal text-slate-400 dark:text-[#64748b]">{{ key.application ? 'Only ' + key.application : 'Any application' }}</span>
                 </td>
 
                 <td class="py-3.5 px-4 text-blue-600 dark:text-[#3b82f6]">{{ key.tokenPrefix }}</td>
@@ -313,6 +314,8 @@ export class SettingsComponent implements OnInit {
   private logService = inject(LogService);
   private ssoService = inject(SsoService);
   private route = inject(ActivatedRoute);
+  // Zoneless app: state set in HTTP callbacks needs an explicit markForCheck to render.
+  private cdr = inject(ChangeDetectorRef);
 
   apiKeys$ = this.logService.apiKeys$;
   systemInfo$ = this.logService.systemInfo$;
@@ -363,6 +366,7 @@ export class SettingsComponent implements OnInit {
         next: (keyObj) => {
           this.createdKeyToken = keyObj.token || null;
           this.showCreateModal = false;
+          this.cdr.markForCheck();
         },
         error: () => {
           console.error('Failed to create API key');

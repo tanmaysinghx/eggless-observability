@@ -46,8 +46,22 @@ export interface ApplicationInfo {
   errorsPerMin: number;
   errorCount: number;
   uptime: string;
-  status: 'healthy' | 'warning' | 'critical';
+  /** pending = registered but no logs received yet. */
+  status: 'healthy' | 'warning' | 'critical' | 'pending';
   description?: string;
+  createdAt?: string;
+}
+
+export interface NewApplication {
+  name: string;
+  environment: Environment;
+  description?: string;
+}
+
+export interface ApplicationRegistration {
+  application: ApplicationInfo;
+  /** Ingestion key bound to the application; `token` is only returned here. */
+  apiKey: ApiKey;
 }
 
 export interface AlertRule {
@@ -71,6 +85,8 @@ export interface ApiKey {
   created: string;
   lastUsed: string;
   status: 'active' | 'revoked';
+  /** Set when the key may only send logs for this application. */
+  application?: string;
 }
 
 export interface DashboardWidget {

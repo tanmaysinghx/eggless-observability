@@ -79,12 +79,12 @@ import { LogService } from '../../core/services/log.service';
             <div *ngFor="let app of (apps$ | async)" class="p-3 bg-[#161e2c] border border-[#20293a] rounded-md flex items-center justify-between hover:border-[#f59e0b]/50 transition-colors">
               <div>
                 <div class="font-bold text-[#f0f4f8] flex items-center gap-2 text-xs">
-                  <span class="w-2 h-2 rounded-full" [ngClass]="app.status === 'healthy' ? 'bg-[#10b981]' : app.status === 'warning' ? 'bg-[#f59e0b]' : 'bg-[#ef4444]'"></span>
+                  <span class="w-2 h-2 rounded-full" [ngClass]="app.status === 'healthy' ? 'bg-[#10b981]' : app.status === 'warning' ? 'bg-[#f59e0b]' : app.status === 'pending' ? 'bg-[#64748b]' : 'bg-[#ef4444]'"></span>
                   {{ app.name }}
                 </div>
                 <div class="text-[10px] text-[#64748b] font-sans mt-0.5">{{ app.logsPerMin | number }} logs/min</div>
               </div>
-              <span class="px-2 py-0.5 rounded text-[10px] font-sans font-bold" [ngClass]="app.status === 'healthy' ? 'bg-[#10b981]/15 text-[#34d399]' : app.status === 'warning' ? 'bg-[#f59e0b]/15 text-[#fbbf24]' : 'bg-[#ef4444]/15 text-[#f87171]'">
+              <span class="px-2 py-0.5 rounded text-[10px] font-sans font-bold" [ngClass]="app.status === 'healthy' ? 'bg-[#10b981]/15 text-[#34d399]' : app.status === 'warning' ? 'bg-[#f59e0b]/15 text-[#fbbf24]' : app.status === 'pending' ? 'bg-[#64748b]/15 text-[#94a3b8]' : 'bg-[#ef4444]/15 text-[#f87171]'">
                 {{ app.status }}
               </span>
             </div>
