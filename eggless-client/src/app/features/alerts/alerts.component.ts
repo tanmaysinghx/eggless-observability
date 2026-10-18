@@ -14,7 +14,7 @@ import { AlertRule } from '../../core/models/log.model';
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-xl font-bold text-[#f0f4f8] tracking-tight">Alert Rules & Incident Dispatch</h1>
-          <p class="text-[#64748b] text-xs mt-0.5">Automated condition monitors evaluating real-time log query streams</p>
+          <p class="text-[#64748b] text-xs mt-0.5">Rules are evaluated against recent logs every few seconds (30s by default); webhook channels are notified when a rule fires</p>
         </div>
 
         <button
@@ -53,9 +53,12 @@ import { AlertRule } from '../../core/models/log.model';
 
               <td class="py-3.5 px-4 text-[#34d399] font-mono text-[11px] bg-[#0b0e14]/50 rounded">{{ rule.query }}</td>
 
-              <td class="py-3.5 px-4 text-[#e6edf3] font-sans">{{ rule.condition }}</td>
+              <td class="py-3.5 px-4 text-[#e6edf3] font-sans">
+                {{ rule.condition }} <span class="text-[#64748b]">/ {{ rule.window }}</span>
+                <span *ngIf="rule.lastTriggered" class="block text-[10px] text-[#64748b]">Last fired {{ rule.lastTriggered }}</span>
+              </td>
 
-              <td class="py-3.5 px-4 text-[#94a3b8] font-sans">{{ rule.channel }}</td>
+              <td class="py-3.5 px-4 text-[#94a3b8] font-sans max-w-[220px] truncate" [title]="rule.channel">{{ rule.channel }}</td>
 
               <td class="py-3.5 px-4 font-sans">
                 <span
@@ -108,12 +111,8 @@ import { AlertRule } from '../../core/models/log.model';
               <div>
                 <label class="block text-[#64748b] font-semibold mb-1">Target Application</label>
                 <select [(ngModel)]="newRule.application" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a] font-mono">
-                  <option value="payment-api">payment-api</option>
-                  <option value="order-service">order-service</option>
-                  <option value="auth-service">auth-service</option>
-                  <option value="frontend">frontend</option>
-                  <option value="notification-service">notification-service</option>
-                  <option value="db-proxy">db-proxy</option>
+                  <option value="all">All applications</option>
+                  <option *ngFor="let app of (apps$ | async)" [value]="app.name">{{ app.name }}</option>
                 </select>
               </div>
 
@@ -123,6 +122,7 @@ import { AlertRule } from '../../core/models/log.model';
                   <option value="1m">1 Minute</option>
                   <option value="5m">5 Minutes</option>
                   <option value="15m">15 Minutes</option>
+                  <option value="1h">1 Hour</option>
                 </select>
               </div>
             </div>
@@ -134,19 +134,18 @@ import { AlertRule } from '../../core/models/log.model';
 
             <div>
               <label class="block text-[#64748b] font-semibold mb-1">Trigger Threshold Condition</label>
-              <input [(ngModel)]="newRule.condition" type="text" placeholder="e.g. ERROR > 50 logs in 5 minutes" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a]" />
+              <input [(ngModel)]="newRule.condition" type="text" placeholder="e.g. ERROR > 50" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a] font-mono" />
+              <p class="text-[#64748b] text-[10px] mt-1">Metric, comparison, number: <span class="font-mono">count &gt; 100</span>, <span class="font-mono">ERROR &gt;= 10</span>, <span class="font-mono">error_rate &gt; 5%</span>. Counted over the window, among logs matching the query.</p>
             </div>
 
             <div>
               <label class="block text-[#64748b] font-semibold mb-1">Notification Channel</label>
-              <select [(ngModel)]="newRule.channel" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a]">
-                <option value="#alerts-payments (Slack)">#alerts-payments (Slack)</option>
-                <option value="PagerDuty (On-Call)">PagerDuty (On-Call)</option>
-                <option value="#security-ops">#security-ops</option>
-                <option value="Webhook: https://hooks.company.com/logs">Custom Webhook</option>
-              </select>
+              <input [(ngModel)]="newRule.channel" type="text" placeholder="https://hooks.slack.com/services/... (leave empty for in-app only)" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a] font-mono" />
+              <p class="text-[#64748b] text-[10px] mt-1">A webhook URL (Slack, Discord, Mattermost or any JSON endpoint) is POSTed to when the rule triggers.</p>
             </div>
           </div>
+
+          <div *ngIf="createError" class="p-2.5 rounded border border-[#ef4444]/40 bg-[#180e12] text-[#f87171]">{{ createError }}</div>
 
           <div class="flex items-center justify-end gap-2 pt-3 border-t border-[#20293a]">
             <button (click)="showCreateModal = false" class="px-3 py-1.5 bg-[#161e2c] text-white rounded">Cancel</button>
@@ -161,15 +160,17 @@ export class AlertsComponent {
   private logService = inject(LogService);
 
   alerts$ = this.logService.alerts$;
+  apps$ = this.logService.applications$;
   showCreateModal = false;
+  createError: string | null = null;
 
   newRule = {
-    name: 'Payment Failure Surge',
-    application: 'payment-api',
+    name: '',
+    application: 'all',
     query: 'level:ERROR',
-    condition: 'ERROR > 50 in 5 minutes',
+    condition: 'ERROR > 50',
     window: '5m',
-    channel: '#alerts-payments (Slack)'
+    channel: ''
   };
 
   toggleRule(id: string) {
@@ -181,10 +182,13 @@ export class AlertsComponent {
   }
 
   submitNewRule() {
-    this.logService.addAlertRule({
-      ...this.newRule,
-      enabled: true
+    this.createError = null;
+    this.logService.addAlertRule({ ...this.newRule, enabled: true }).subscribe({
+      next: () => {
+        this.showCreateModal = false;
+        this.newRule = { ...this.newRule, name: '' };
+      },
+      error: (err: Error) => this.createError = err.message
     });
-    this.showCreateModal = false;
   }
 }

@@ -256,40 +256,32 @@ import { ApiKey } from '../../core/models/log.model';
         </div>
       </div>
 
-      <!-- TAB: General -->
-      <div *ngIf="activeTab === 'general'" class="space-y-4 max-w-xl">
+      <!-- TAB: Server -->
+      <div *ngIf="activeTab === 'server'" class="space-y-4 max-w-2xl">
         <div class="bg-white dark:bg-[#121722] border border-slate-200 dark:border-[#20293a] rounded-lg p-4 space-y-3 font-sans shadow-sm">
-          <h3 class="font-bold text-slate-900 dark:text-white text-sm">General Organization Info</h3>
-          <div>
-            <label class="block text-slate-500 dark:text-[#64748b] mb-1">Organization Name</label>
-            <input type="text" value="Eggless Observability Platform" class="w-full bg-slate-50 dark:bg-[#111622] text-slate-900 dark:text-white p-2 rounded border border-slate-200 dark:border-[#20293a]" />
-          </div>
-          <div>
-            <label class="block text-slate-500 dark:text-[#64748b] mb-1">Default Log Region</label>
-            <input type="text" value="us-east-1 (N. Virginia)" disabled class="w-full bg-slate-50 dark:bg-[#111622] text-slate-400 dark:text-[#64748b] p-2 rounded border border-slate-200 dark:border-[#20293a]" />
-          </div>
-        </div>
-      </div>
+          <h3 class="font-bold text-slate-900 dark:text-white text-sm">Server Configuration</h3>
+          <p class="text-slate-500 dark:text-[#64748b]">These are set with environment variables when starting Eggless and are shown here read-only.</p>
 
-      <!-- TAB: Retention -->
-      <div *ngIf="activeTab === 'retention'" class="space-y-4 max-w-xl">
-        <div class="bg-white dark:bg-[#121722] border border-slate-200 dark:border-[#20293a] rounded-lg p-4 space-y-3 font-sans shadow-sm">
-          <h3 class="font-bold text-slate-900 dark:text-white text-sm">Data Retention Policy</h3>
-          <div>
-            <label class="block text-slate-500 dark:text-[#64748b] mb-1">Hot Searchable Retention</label>
-            <select class="w-full bg-slate-50 dark:bg-[#111622] text-slate-900 dark:text-white p-2 rounded border border-slate-200 dark:border-[#20293a]">
-              <option>30 Days (Standard SaaS Plan)</option>
-              <option>60 Days</option>
-              <option>90 Days</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-slate-500 dark:text-[#64748b] mb-1">Cold Archive Storage</label>
-            <select class="w-full bg-slate-50 dark:bg-[#111622] text-slate-900 dark:text-white p-2 rounded border border-slate-200 dark:border-[#20293a]">
-              <option>365 Days AWS S3 Bucket</option>
-              <option>Indefinite Archive</option>
-            </select>
-          </div>
+          <table *ngIf="systemInfo$ | async as info; else noInfo" class="w-full text-left">
+            <tbody class="divide-y divide-slate-100 dark:divide-[#20293a]">
+              <tr>
+                <td class="py-2 pr-4 text-slate-500 dark:text-[#94a3b8]">Log retention</td>
+                <td class="py-2 font-semibold text-slate-900 dark:text-white">{{ info.retentionDays > 0 ? info.retentionDays + ' days' : 'Kept forever' }}</td>
+                <td class="py-2 font-mono text-[10px] text-slate-400 dark:text-[#64748b]">EGGLESS_RETENTION_DAYS</td>
+              </tr>
+              <tr>
+                <td class="py-2 pr-4 text-slate-500 dark:text-[#94a3b8]">Ingestion requires API key</td>
+                <td class="py-2 font-semibold" [ngClass]="info.requireApiKey ? 'text-emerald-600 dark:text-[#34d399]' : 'text-rose-600 dark:text-[#f87171]'">{{ info.requireApiKey ? 'Yes' : 'No — anyone who can reach the server can send logs' }}</td>
+                <td class="py-2 font-mono text-[10px] text-slate-400 dark:text-[#64748b]">EGGLESS_INGEST_REQUIRE_API_KEY</td>
+              </tr>
+              <tr>
+                <td class="py-2 pr-4 text-slate-500 dark:text-[#94a3b8]">Alert evaluation interval</td>
+                <td class="py-2 font-semibold text-slate-900 dark:text-white">Every {{ info.alertEvaluationIntervalSeconds }}s</td>
+                <td class="py-2 font-mono text-[10px] text-slate-400 dark:text-[#64748b]">EGGLESS_ALERT_INTERVAL_MS</td>
+              </tr>
+            </tbody>
+          </table>
+          <ng-template #noInfo><div class="text-slate-500 dark:text-[#64748b]">Could not load server configuration.</div></ng-template>
         </div>
       </div>
 
@@ -323,6 +315,7 @@ export class SettingsComponent implements OnInit {
   private route = inject(ActivatedRoute);
 
   apiKeys$ = this.logService.apiKeys$;
+  systemInfo$ = this.logService.systemInfo$;
   currentUser$ = this.ssoService.currentUser$;
   portalConfig: PortalSsoConfig = this.ssoService.getConfig();
 
@@ -339,14 +332,14 @@ export class SettingsComponent implements OnInit {
   tabs = [
     { id: 'sso', label: 'Portal SSO' },
     { id: 'apikeys', label: 'API Keys' },
-    { id: 'general', label: 'General' },
-    { id: 'retention', label: 'Retention' }
+    { id: 'server', label: 'Server' }
   ];
 
   ngOnInit() {
     this.route.queryParams.subscribe(params => {
       if (params['tab']) {
-        this.activeTab = params['tab'];
+        // Old links to the General/Retention tabs land on the Server tab that replaced them.
+        this.activeTab = ['general', 'retention'].includes(params['tab']) ? 'server' : params['tab'];
       }
     });
   }

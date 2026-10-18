@@ -81,3 +81,32 @@ export interface DashboardWidget {
   query?: string;
   data?: any;
 }
+
+export interface MetricsBucket {
+  start: string;
+  count: number;
+  errors: number;
+  warns: number;
+}
+
+export interface MetricsSummary {
+  timeRange: string;
+  from: string;
+  to: string;
+  totalLogs: number;
+  errorCount: number;
+  warnCount: number;
+  logsPerMin: number;
+  errorRate: number;
+  activeServices: number;
+  byLevel: Record<string, number>;
+  timeseries: MetricsBucket[];
+  byService: { service: string; count: number; errors: number; logsPerMin: number }[];
+  topErrors: { message: string; service: string; count: number; lastSeen: string }[];
+}
+
+export interface SystemInfo {
+  retentionDays: number;
+  requireApiKey: boolean;
+  alertEvaluationIntervalSeconds: number;
+}

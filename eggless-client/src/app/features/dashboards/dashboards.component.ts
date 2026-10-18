@@ -1,212 +1,196 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
+import { BehaviorSubject, combineLatest } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
 import { LogService } from '../../core/services/log.service';
+import { MetricsSummary } from '../../core/models/log.model';
+
+interface Bar {
+  label: string;
+  height: number;
+  errorPct: number;
+  count: number;
+  errors: number;
+}
+
+const LEVEL_STYLES: Record<string, { text: string; bar: string }> = {
+  INFO: { text: 'text-[#34d399]', bar: 'bg-[#10b981]' },
+  WARN: { text: 'text-[#fbbf24]', bar: 'bg-[#f59e0b]' },
+  ERROR: { text: 'text-[#f87171]', bar: 'bg-[#ef4444]' },
+  FATAL: { text: 'text-[#f87171]', bar: 'bg-[#b91c1c]' },
+  DEBUG: { text: 'text-[#c084fc]', bar: 'bg-[#8b5cf6]' },
+  TRACE: { text: 'text-[#94a3b8]', bar: 'bg-[#64748b]' }
+};
 
 @Component({
   selector: 'app-dashboards',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="h-full flex flex-col bg-[#0b0e14] p-6 gap-6 text-xs overflow-y-auto">
       <!-- Top Bar Controls -->
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-xl font-bold text-[#f0f4f8] tracking-tight">Dashboards & Metrics</h1>
-          <p class="text-[#64748b] text-xs mt-0.5">Real-time log telemetry visualizer and service health dashboards</p>
+          <p class="text-[#64748b] text-xs mt-0.5">Log volume, error rates and top errors, computed from ingested logs</p>
         </div>
 
         <div class="flex items-center gap-3">
-          <select class="h-8 px-2 bg-[#161e2c] text-[#e6edf3] text-xs rounded border border-[#20293a]">
-            <option>Dashboard: Production System Health</option>
-            <option>Dashboard: Payment Gateway SLA</option>
-            <option>Dashboard: Auth & Security Audit</option>
+          <select [ngModel]="timeRange$.value" (ngModelChange)="timeRange$.next($event)" class="h-8 px-2 bg-[#161e2c] text-[#e6edf3] text-xs rounded border border-[#20293a]">
+            <option *ngFor="let r of timeRanges" [value]="r.value">{{ r.label }}</option>
           </select>
-
-          <button
-            (click)="showAddWidgetModal = true"
-            class="px-3 py-1.5 bg-[#f59e0b] hover:bg-[#d97706] text-[#0b0e14] font-bold rounded-md transition-colors text-xs flex items-center gap-1 shadow"
-          >
-            + Add Widget
-          </button>
         </div>
       </div>
 
-      <!-- Dashboard Grid Layout -->
-      <div class="grid grid-cols-3 gap-4">
-        <!-- Widget 1: Log Ingestion Rate Over Time (SVG Bar Graph) -->
+      <div *ngIf="view$ | async as v; else loading" class="grid grid-cols-3 gap-4">
+        <!-- Widget 1: Log Count Over Time -->
         <div class="col-span-2 bg-[#121722] border border-[#20293a] rounded-lg p-4 flex flex-col gap-3">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-[#f0f4f8] text-sm">Log Count Over Time (Last 1 Hour)</span>
-            <span class="text-[#34d399] font-mono text-xs">12,482 total logs</span>
+            <span class="font-bold text-[#f0f4f8] text-sm">Log Count Over Time ({{ rangeLabel(v.m.timeRange) }})</span>
+            <span class="text-[#34d399] font-mono text-xs">{{ v.m.totalLogs | number }} total logs · {{ v.m.logsPerMin | number:'1.0-1' }}/min</span>
           </div>
 
-          <!-- SVG Bar Chart Visualization -->
           <div class="h-40 w-full flex items-end gap-1.5 pt-4 pb-2 px-2 border-b border-[#20293a]">
-            <div *ngFor="let bar of logVolumeBars" class="flex-1 bg-[#1c273a] hover:bg-[#f59e0b] rounded-t transition-all group relative flex flex-col justify-end" [style.height.%]="bar.height">
-              <div class="bg-[#ef4444] rounded-t" [style.height.%]="bar.errorPct"></div>
-              <!-- Tooltip -->
+            <div *ngFor="let bar of v.bars" class="flex-1 h-full flex flex-col justify-end group relative">
+              <div class="w-full bg-[#1c273a] group-hover:bg-[#f59e0b] rounded-t transition-all flex flex-col justify-end overflow-hidden" [style.height.%]="bar.height">
+                <div class="bg-[#ef4444]" [style.height.%]="bar.errorPct"></div>
+              </div>
               <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-[#0b0e14] border border-[#20293a] px-2 py-1 rounded text-[10px] font-mono text-white whitespace-nowrap z-20">
-                {{ bar.time }}: {{ bar.count }} logs ({{ bar.errors }} errors)
+                {{ bar.label }}: {{ bar.count | number }} logs ({{ bar.errors | number }} errors)
               </div>
             </div>
           </div>
 
           <div class="flex items-center justify-between text-[10px] text-[#64748b] font-mono">
-            <span>20:00</span>
-            <span>20:15</span>
-            <span>20:30</span>
-            <span>20:45</span>
-            <span>NOW</span>
+            <span *ngFor="let t of v.ticks">{{ t }}</span>
           </div>
         </div>
 
-        <!-- Widget 2: Logs by Level Breakdown (Donut Progress style) -->
+        <!-- Widget 2: Logs by Level -->
         <div class="bg-[#121722] border border-[#20293a] rounded-lg p-4 flex flex-col justify-between">
           <div class="flex items-center justify-between">
             <span class="font-bold text-[#f0f4f8] text-sm">Logs by Level</span>
-            <span class="text-[#64748b] text-[10px]">Last 24h</span>
+            <span class="text-[#64748b] text-[10px]">{{ v.m.errorRate | number:'1.0-1' }}% error rate</span>
           </div>
 
           <div class="space-y-3 py-2 font-mono">
-            <div>
+            <div *ngFor="let l of v.levels">
               <div class="flex items-center justify-between text-xs mb-1">
-                <span class="text-[#34d399] font-semibold">INFO (78%)</span>
-                <span class="text-[#94a3b8]">9,735</span>
+                <span class="font-semibold" [ngClass]="l.text">{{ l.level }} ({{ l.pct | number:'1.0-1' }}%)</span>
+                <span class="text-[#94a3b8]">{{ l.count | number }}</span>
               </div>
               <div class="w-full bg-[#161e2c] h-2 rounded-full overflow-hidden">
-                <div class="bg-[#10b981] h-full w-[78%]"></div>
+                <div class="h-full" [ngClass]="l.bar" [style.width.%]="l.pct"></div>
               </div>
             </div>
-
-            <div>
-              <div class="flex items-center justify-between text-xs mb-1">
-                <span class="text-[#fbbf24] font-semibold">WARN (16%)</span>
-                <span class="text-[#94a3b8]">1,997</span>
-              </div>
-              <div class="w-full bg-[#161e2c] h-2 rounded-full overflow-hidden">
-                <div class="bg-[#f59e0b] h-full w-[16%]"></div>
-              </div>
-            </div>
-
-            <div>
-              <div class="flex items-center justify-between text-xs mb-1">
-                <span class="text-[#f87171] font-semibold">ERROR (4.5%)</span>
-                <span class="text-[#94a3b8]">561</span>
-              </div>
-              <div class="w-full bg-[#161e2c] h-2 rounded-full overflow-hidden">
-                <div class="bg-[#ef4444] h-full w-[4.5%]"></div>
-              </div>
-            </div>
-
-            <div>
-              <div class="flex items-center justify-between text-xs mb-1">
-                <span class="text-[#c084fc] font-semibold">DEBUG (1.5%)</span>
-                <span class="text-[#94a3b8]">189</span>
-              </div>
-              <div class="w-full bg-[#161e2c] h-2 rounded-full overflow-hidden">
-                <div class="bg-[#8b5cf6] h-full w-[1.5%]"></div>
-              </div>
-            </div>
+            <div *ngIf="v.levels.length === 0" class="text-[#64748b] font-sans">No logs in this time range.</div>
           </div>
         </div>
 
-        <!-- Widget 3: Logs by Application Breakdown -->
+        <!-- Widget 3: Logs by Application -->
         <div class="col-span-1 bg-[#121722] border border-[#20293a] rounded-lg p-4">
           <span class="font-bold text-[#f0f4f8] text-sm">Top Applications Volume</span>
           <div class="mt-4 space-y-2.5 font-mono">
-            <div *ngFor="let app of appBreakdown" class="flex items-center justify-between text-xs p-2 bg-[#161e2c] rounded border border-[#20293a]">
-              <span class="text-[#f59e0b] font-semibold">{{ app.name }}</span>
-              <span class="text-[#e6edf3]">{{ app.rate }} / min</span>
-            </div>
+            <button *ngFor="let app of v.m.byService" (click)="openLogs(app.service)" class="w-full flex items-center justify-between text-xs p-2 bg-[#161e2c] rounded border border-[#20293a] hover:border-[#f59e0b]/50">
+              <span class="text-[#f59e0b] font-semibold truncate">{{ app.service }}</span>
+              <span class="text-[#e6edf3] shrink-0">
+                {{ app.logsPerMin | number:'1.0-1' }} / min
+                <span *ngIf="app.errors > 0" class="text-[#f87171]"> · {{ app.errors | number }} err</span>
+              </span>
+            </button>
+            <div *ngIf="v.m.byService.length === 0" class="text-[#64748b] font-sans">No applications sent logs in this time range.</div>
           </div>
         </div>
 
-        <!-- Widget 4: Top Error Messages List -->
+        <!-- Widget 4: Top Error Messages -->
         <div class="col-span-2 bg-[#121722] border border-[#20293a] rounded-lg p-4">
           <div class="flex items-center justify-between mb-3">
             <span class="font-bold text-[#f0f4f8] text-sm">Top Error Messages & Exceptions</span>
-            <span class="text-[#f87171] text-xs font-mono">183 active errors</span>
+            <span class="text-[#f87171] text-xs font-mono">{{ v.m.errorCount | number }} errors</span>
           </div>
 
           <div class="space-y-2 font-mono text-xs">
-            <div class="p-2.5 bg-[#180e12] border border-[#ef4444]/30 rounded flex items-center justify-between">
-              <div class="truncate max-w-lg text-[#f87171]">
-                Payment failed: GatewayTimeoutException in Stripe SDK
-                <span class="block text-[10px] text-[#64748b] font-sans">payment-api • 142 occurrences</span>
+            <button *ngFor="let e of v.m.topErrors" (click)="openLogs(e.service, e.message)" class="w-full text-left p-2.5 bg-[#180e12] border border-[#ef4444]/30 rounded flex items-center justify-between gap-3 hover:border-[#ef4444]/60">
+              <div class="truncate text-[#f87171] min-w-0">
+                {{ e.message }}
+                <span class="block text-[10px] text-[#64748b] font-sans">{{ e.service }} • last seen {{ e.lastSeen | date:'MMM d, HH:mm:ss' }}</span>
               </div>
-              <span class="px-2 py-0.5 bg-[#ef4444]/20 text-[#f87171] rounded text-[10px] font-bold">HIGH</span>
-            </div>
-
-            <div class="p-2.5 bg-[#180e12] border border-[#ef4444]/30 rounded flex items-center justify-between">
-              <div class="truncate max-w-lg text-[#f87171]">
-                DB Connection pool exhausted: 50/50 connections in use
-                <span class="block text-[10px] text-[#64748b] font-sans">auth-service • 88 occurrences</span>
-              </div>
-              <span class="px-2 py-0.5 bg-[#ef4444]/20 text-[#f87171] rounded text-[10px] font-bold">CRITICAL</span>
-            </div>
-
-            <div class="p-2.5 bg-[#180e12] border border-[#ef4444]/30 rounded flex items-center justify-between">
-              <div class="truncate max-w-lg text-[#f87171]">
-                Unhandled Promise Rejection: Failed to fetch /api/v1/metrics/live 502
-                <span class="block text-[10px] text-[#64748b] font-sans">frontend • 42 occurrences</span>
-              </div>
-              <span class="px-2 py-0.5 bg-[#f59e0b]/20 text-[#fbbf24] rounded text-[10px] font-bold">MEDIUM</span>
-            </div>
+              <span class="shrink-0 px-2 py-0.5 bg-[#ef4444]/20 text-[#f87171] rounded text-[10px] font-bold">{{ e.count | number }}×</span>
+            </button>
+            <div *ngIf="v.m.topErrors.length === 0" class="text-[#64748b] font-sans">No errors in this time range. 🎉</div>
           </div>
         </div>
       </div>
 
-      <!-- Modal: Add Widget -->
-      <div *ngIf="showAddWidgetModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-        <div class="bg-[#151b26] border border-[#20293a] rounded-lg w-full max-w-md p-5 text-xs space-y-4">
-          <div class="flex items-center justify-between border-b border-[#20293a] pb-3">
-            <h3 class="text-sm font-bold text-[#f0f4f8]">Add Custom Dashboard Widget</h3>
-            <button (click)="showAddWidgetModal = false" class="text-[#64748b] hover:text-[#f0f4f8]">✕</button>
-          </div>
-
-          <div>
-            <label class="block text-[#64748b] font-semibold mb-1">Widget Title</label>
-            <input type="text" placeholder="e.g. Stripe Errors Count" class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a]" />
-          </div>
-
-          <div>
-            <label class="block text-[#64748b] font-semibold mb-1">Widget Metric Type</label>
-            <select class="w-full bg-[#111622] text-[#f0f4f8] p-2 rounded border border-[#20293a]">
-              <option>Log Count Over Time</option>
-              <option>Error Count Over Time</option>
-              <option>Logs by Application</option>
-              <option>Logs by Level Distribution</option>
-              <option>Top Error Messages List</option>
-            </select>
-          </div>
-
-          <div class="flex items-center justify-end gap-2 pt-2 border-t border-[#20293a]">
-            <button (click)="showAddWidgetModal = false" class="px-3 py-1.5 bg-[#161e2c] text-[#e6edf3] border border-[#20293a] rounded hover:bg-[#1f293d]">Cancel</button>
-            <button (click)="showAddWidgetModal = false" class="px-3 py-1.5 bg-[#f59e0b] text-[#0b0e14] font-bold rounded">Add Widget</button>
-          </div>
-        </div>
-      </div>
+      <ng-template #loading>
+        <div class="text-[#64748b]">Loading metrics…</div>
+      </ng-template>
     </div>
   `
 })
 export class DashboardsComponent {
   private logService = inject(LogService);
+  private router = inject(Router);
 
-  showAddWidgetModal = false;
-
-  logVolumeBars = Array.from({ length: 30 }, (_, i) => ({
-    time: `${20}:${String(i * 2).padStart(2, '0')}`,
-    height: Math.floor(Math.random() * 70) + 30,
-    errorPct: Math.floor(Math.random() * 25) + 5,
-    count: Math.floor(Math.random() * 400) + 200,
-    errors: Math.floor(Math.random() * 20) + 2
-  }));
-
-  appBreakdown = [
-    { name: 'payment-api', rate: '1,243' },
-    { name: 'order-service', rate: '824' },
-    { name: 'auth-service', rate: '421' },
-    { name: 'frontend', rate: '2,150' },
-    { name: 'notification-service', rate: '180' }
+  timeRanges = [
+    { value: '15m', label: 'Last 15 minutes' },
+    { value: '1h', label: 'Last 1 hour' },
+    { value: '6h', label: 'Last 6 hours' },
+    { value: '24h', label: 'Last 24 hours' },
+    { value: '7d', label: 'Last 7 days' }
   ];
+
+  timeRange$ = new BehaviorSubject<string>('1h');
+
+  view$ = combineLatest([this.timeRange$, this.logService.selectedApp$, this.logService.selectedEnv$]).pipe(
+    switchMap(([range, app, env]) => this.logService.metrics(range, app, env)),
+    map(m => (m ? this.toView(m) : null))
+  );
+
+  rangeLabel(value: string): string {
+    return this.timeRanges.find(r => r.value === value)?.label ?? value;
+  }
+
+  openLogs(service: string, message?: string) {
+    this.logService.setSelectedApp(service);
+    this.logService.setFilter({ timeRange: this.timeRange$.value, levels: message ? ['ERROR'] : [] });
+    this.logService.setSearchQuery(message ? `message:"${message.replace(/"/g, '')}"` : '');
+    this.router.navigate(['/logs']);
+  }
+
+  private toView(m: MetricsSummary) {
+    const max = Math.max(1, ...m.timeseries.map(b => b.count));
+    const longRange = ['24h', '7d'].includes(m.timeRange);
+    const fmt = (iso: string) => {
+      const d = new Date(iso);
+      const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return longRange ? `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}` : time;
+    };
+
+    const bars: Bar[] = m.timeseries.map(b => ({
+      label: fmt(b.start),
+      height: b.count === 0 ? 2 : Math.max(4, (b.count / max) * 100),
+      errorPct: b.count === 0 ? 0 : (b.errors / b.count) * 100,
+      count: b.count,
+      errors: b.errors
+    }));
+
+    const n = m.timeseries.length;
+    const ticks = [0, 0.25, 0.5, 0.75].map(f => fmt(m.timeseries[Math.floor(f * n)]?.start ?? m.from));
+    ticks.push('NOW');
+
+    const levels = Object.entries(m.byLevel)
+      .filter(([, count]) => count > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([level, count]) => ({
+        level,
+        count,
+        pct: m.totalLogs === 0 ? 0 : (100 * count) / m.totalLogs,
+        ...(LEVEL_STYLES[level] ?? LEVEL_STYLES['TRACE'])
+      }));
+
+    return { m, bars, ticks, levels };
+  }
 }

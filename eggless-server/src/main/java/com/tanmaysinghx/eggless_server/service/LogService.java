@@ -6,12 +6,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tanmaysinghx.eggless_server.dto.LogEntryDto;
 import com.tanmaysinghx.eggless_server.dto.LogStatsDto;
 import com.tanmaysinghx.eggless_server.entity.LogEntryEntity;
+import com.tanmaysinghx.eggless_server.query.LogQuery;
 import com.tanmaysinghx.eggless_server.repository.LogRepository;
 import com.tanmaysinghx.eggless_server.websocket.LogStreamWebSocketHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,13 +35,16 @@ public class LogService {
     private final LogStreamWebSocketHandler webSocketHandler;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    private static final Duration MAX_CLOCK_SKEW = Duration.ofMinutes(5);
+    private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter.ofPattern("HH:mm:ss.SSS").withZone(ZoneOffset.UTC);
+
     @Transactional
     public LogEntryDto ingestLog(LogEntryDto dto) {
         Instant now = Instant.now();
-        String id = dto.getId() != null ? dto.getId() : "log_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-        String timestamp = dto.getTimestamp() != null ? dto.getTimestamp() : DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
-                .withZone(ZoneOffset.UTC)
-                .format(now);
+        Instant occurredAt = parseClientTimestamp(dto.getFullTimestamp(), now);
+        // Ids are always server-assigned so a client cannot overwrite an existing log.
+        String id = "log_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String timestamp = DISPLAY_TIME.format(occurredAt);
 
         String metadataJson = null;
         if (dto.getMetadata() != null && !dto.getMetadata().isEmpty()) {
@@ -50,15 +56,15 @@ public class LogService {
         LogEntryEntity entity = LogEntryEntity.builder()
                 .id(id)
                 .timestamp(timestamp)
-                .fullTimestamp(now)
-                .level(dto.getLevel() != null ? dto.getLevel().toUpperCase() : "INFO")
-                .service(dto.getService() != null ? dto.getService() : "default-service")
-                .environment(dto.getEnvironment() != null ? dto.getEnvironment() : "production")
+                .fullTimestamp(occurredAt)
+                .level(clip(dto.getLevel() != null ? dto.getLevel().toUpperCase() : "INFO", 16))
+                .service(clip(dto.getService() != null ? dto.getService() : "default-service", 64))
+                .environment(clip(dto.getEnvironment() != null ? dto.getEnvironment() : "production", 32))
                 .message(dto.getMessage() != null ? dto.getMessage() : "")
-                .traceId(dto.getTraceId())
-                .requestId(dto.getRequestId())
-                .userId(dto.getUserId())
-                .host(dto.getHost() != null ? dto.getHost() : "app-node-1")
+                .traceId(clip(dto.getTraceId(), 64))
+                .requestId(clip(dto.getRequestId(), 64))
+                .userId(clip(dto.getUserId(), 64))
+                .host(clip(dto.getHost() != null ? dto.getHost() : "app-node-1", 64))
                 .metadata(metadataJson)
                 .stackTrace(dto.getStackTrace())
                 .build();
@@ -67,7 +73,7 @@ public class LogService {
         LogEntryDto result = toDto(saved);
 
         // Update application health & metrics
-        applicationService.recordLogActivity(saved.getService(), saved.getEnvironment(), saved.getLevel());
+        applicationService.recordLogActivity(saved.getService(), saved.getEnvironment(), saved.getFullTimestamp());
 
         // Broadcast to live-tail WebSocket subscribers
         try {
@@ -95,41 +101,25 @@ public class LogService {
             int limit,
             int offset
     ) {
-        Instant since = null;
-        if (timeRange != null && !timeRange.isBlank()) {
-            since = switch (timeRange.toLowerCase()) {
-                case "15m" -> Instant.now().minus(Duration.ofMinutes(15));
-                case "1h" -> Instant.now().minus(Duration.ofHours(1));
-                case "6h" -> Instant.now().minus(Duration.ofHours(6));
-                case "24h" -> Instant.now().minus(Duration.ofHours(24));
-                case "7d" -> Instant.now().minus(Duration.ofDays(7));
-                default -> null;
-            };
-        }
+        Duration window = LogQuery.parseWindow(timeRange);
+        LogQuery query = LogQuery.builder()
+                .service(service)
+                .level(level)
+                .environment(environment)
+                .search(search)
+                .since(window != null ? Instant.now().minus(window) : null)
+                .build();
 
         int pageSize = Math.min(Math.max(limit, 10), 1000);
         int pageNumber = Math.max(offset / pageSize, 0);
-        Pageable pageable = PageRequest.of(pageNumber, pageSize);
+        Pageable pageable = PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Direction.DESC, "fullTimestamp"));
 
-        String svcParam = (service != null && !service.equalsIgnoreCase("all")) ? service : null;
-        String lvlParam = (level != null && !level.equalsIgnoreCase("all")) ? level.toUpperCase() : null;
-        String envParam = (environment != null && !environment.equalsIgnoreCase("all")) ? environment : null;
-        String searchParam = (search != null && !search.isBlank()) ? search.trim() : null;
-
-        List<LogEntryEntity> logs = logRepository.findLogsWithFilter(
-                svcParam,
-                lvlParam,
-                envParam,
-                searchParam,
-                since,
-                pageable
-        );
-
-        List<LogEntryDto> dtoList = logs.stream().map(this::toDto).collect(Collectors.toList());
+        Page<LogEntryEntity> page = logRepository.findAll(query.toSpecification(), pageable);
+        List<LogEntryDto> dtoList = page.getContent().stream().map(this::toDto).collect(Collectors.toList());
 
         Map<String, Object> response = new HashMap<>();
         response.put("logs", dtoList);
-        response.put("total", logRepository.count());
+        response.put("total", page.getTotalElements());
         response.put("count", dtoList.size());
         return response;
     }
@@ -140,14 +130,31 @@ public class LogService {
         long errors = logRepository.countByLevel("ERROR") + logRepository.countByLevel("FATAL");
         long warns = logRepository.countByLevel("WARN");
         long apps = logRepository.countDistinctServices();
+        Instant now = Instant.now();
+        long lastFiveMinutes = logRepository.count(LogQuery.builder().since(now.minus(Duration.ofMinutes(5))).until(now).build().toSpecification());
 
         return LogStatsDto.builder()
                 .totalLogs(total)
                 .errorCount(errors)
                 .warnCount(warns)
-                .activeApplications(Math.max(apps, 1))
-                .logsPerMin(Math.round(total * 1.5))
+                .activeApplications(apps)
+                .logsPerMin(Math.round(lastFiveMinutes / 5.0))
                 .build();
+    }
+
+    private static String clip(String value, int max) {
+        return value == null || value.length() <= max ? value : value.substring(0, max);
+    }
+
+    /** Uses the time the client says the log happened, unless it is missing, unparseable or in the future. */
+    private static Instant parseClientTimestamp(String value, Instant now) {
+        if (value == null || value.isBlank()) return now;
+        try {
+            Instant parsed = Instant.parse(value);
+            return parsed.isAfter(now.plus(MAX_CLOCK_SKEW)) ? now : parsed;
+        } catch (Exception e) {
+            return now;
+        }
     }
 
     public LogEntryDto toDto(LogEntryEntity entity) {

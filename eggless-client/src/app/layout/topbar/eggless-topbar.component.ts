@@ -2,7 +2,7 @@ import { Component, inject, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, NavigationEnd } from '@angular/router';
-import { filter } from 'rxjs/operators';
+import { filter, map } from 'rxjs/operators';
 import { LogService } from '../../core/services/log.service';
 import { ThemeService } from '../../core/services/theme.service';
 import { SsoService } from '../../core/services/sso.service';
@@ -76,7 +76,7 @@ import { RouterModule } from '@angular/router';
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
           </svg>
-          <span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+          <span *ngIf="(triggered$ | async)?.length" class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-rose-500"></span>
         </button>
 
         <!-- Help Modal Toggle -->
@@ -192,23 +192,17 @@ import { RouterModule } from '@angular/router';
       <div *ngIf="showNotifications" class="absolute right-12 top-14 w-80 bg-[#151b26] border border-[#20293a] rounded-lg shadow-2xl z-50 text-xs">
         <div class="p-3 border-b border-[#20293a] flex items-center justify-between">
           <span class="font-semibold text-[#f0f4f8]">Active Alerts & Notifications</span>
-          <span class="bg-[#ef4444]/20 text-[#f87171] text-[10px] px-1.5 py-0.5 rounded font-mono">1 TRIGGERED</span>
+          <span *ngIf="(triggered$ | async)?.length as n" class="bg-[#ef4444]/20 text-[#f87171] text-[10px] px-1.5 py-0.5 rounded font-mono">{{ n }} TRIGGERED</span>
         </div>
         <div class="p-2 space-y-2 max-h-64 overflow-y-auto">
-          <div class="p-2 rounded bg-[#ef4444]/10 border border-[#ef4444]/30">
+          <div *ngFor="let rule of (triggered$ | async)" class="p-2 rounded bg-[#ef4444]/10 border border-[#ef4444]/30">
             <div class="flex items-center justify-between text-[#f87171] font-semibold">
-              <span>High Payment Errors</span>
-              <span class="text-[10px]">10m ago</span>
+              <span>{{ rule.name }}</span>
+              <span class="text-[10px]">{{ rule.lastTriggered }}</span>
             </div>
-            <div class="text-[#94a3b8] text-[11px] mt-1">payment-api generated 183 errors in 5 min (threshold: >100).</div>
+            <div class="text-[#94a3b8] text-[11px] mt-1">{{ rule.application }}: {{ rule.condition }} over {{ rule.window }}</div>
           </div>
-          <div class="p-2 rounded bg-[#161e2c] border border-[#20293a]">
-            <div class="flex items-center justify-between text-[#34d399] font-semibold">
-              <span>DB Pool Normal</span>
-              <span class="text-[10px]">1h ago</span>
-            </div>
-            <div class="text-[#94a3b8] text-[11px]">auth-service connection pool usage dropped below 80%.</div>
-          </div>
+          <div *ngIf="(triggered$ | async)?.length === 0" class="p-2 text-[#64748b] text-[11px]">No alert rules are currently triggered.</div>
         </div>
         <div class="p-2 border-t border-[#20293a] text-center">
           <a routerLink="/alerts" (click)="showNotifications = false" class="text-[#f59e0b] hover:underline text-[11px]">Manage Alert Rules →</a>
@@ -251,6 +245,7 @@ export class EgglessTopbarComponent {
   selectedEnv: Environment | 'all' = 'all';
 
   showNotifications = false;
+  triggered$ = this.logService.alerts$.pipe(map(rules => rules.filter(r => r.status === 'triggered')));
   showHelp = false;
   showUserMenu = false;
 

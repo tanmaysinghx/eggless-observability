@@ -120,29 +120,49 @@ public class DataSeeder implements CommandLineRunner {
 
         // 4. Seed Realistic Initial Logs
         String[] services = {"auth-service", "payment-api", "order-service", "notification-worker"};
-        String[] levels = {"INFO", "INFO", "INFO", "WARN", "ERROR"};
         String[] envs = {"production", "production", "staging"};
 
-        List<String> messages = List.of(
-                "OIDC PKCE authorization token exchanged successfully for sub=usr_99812",
-                "HTTP GET /api/v1/orders completed in 14ms (status=200)",
-                "HikariCP connection pool latency spike: acquisition took 42ms",
-                "Payment settlement transaction tx_99182 authorized for $142.50",
-                "Redis cache hit for key session:user:99812 (ttl=3540s)",
-                "Failed credit card authorization: card declined by issuing bank (PRTL-402)",
-                "Dispatched batch of 48 webhook notifications to subscribed endpoints",
-                "Ingress routing SSL handshake completed with TLSv1.3",
-                "Slow query detected on orders_archive: execution took 128ms",
-                "Portal SSO user authenticated via External Auth API: admin@portalsso.local"
+        // [level, message]; roughly 4% errors and 12% warnings, like a healthy fleet with a few problems.
+        List<String[]> events = List.of(
+                new String[]{"INFO", "OIDC PKCE authorization token exchanged successfully for sub=usr_99812"},
+                new String[]{"INFO", "HTTP GET /api/v1/orders completed in 14ms (status=200)"},
+                new String[]{"INFO", "Payment settlement transaction tx_99182 authorized for $142.50"},
+                new String[]{"DEBUG", "Redis cache hit for key session:user:99812 (ttl=3540s)"},
+                new String[]{"INFO", "Dispatched batch of 48 webhook notifications to subscribed endpoints"},
+                new String[]{"INFO", "Ingress routing SSL handshake completed with TLSv1.3"},
+                new String[]{"WARN", "HikariCP connection pool latency spike: acquisition took 42ms"},
+                new String[]{"INFO", "Portal SSO user authenticated via External Auth API: admin@portalsso.local"},
+                new String[]{"INFO", "HTTP POST /api/v1/cart completed in 22ms (status=201)"},
+                new String[]{"WARN", "Slow query detected on orders_archive: execution took 128ms"},
+                new String[]{"INFO", "Health check passed: db=UP redis=UP queue=UP"},
+                new String[]{"INFO", "HTTP GET /api/v1/products completed in 9ms (status=200)"},
+                new String[]{"INFO", "Background job inventory-sync finished in 1.4s"},
+                new String[]{"INFO", "HTTP GET /api/v1/users/me completed in 6ms (status=200)"},
+                new String[]{"WARN", "Retrying upstream call to shipping-rates (attempt 2/3)"},
+                new String[]{"INFO", "Session refreshed for usr_1043"},
+                new String[]{"INFO", "HTTP GET /api/v1/orders/ORD-93821 completed in 11ms (status=200)"},
+                new String[]{"INFO", "Email receipt queued for order ORD-93821"},
+                new String[]{"INFO", "HTTP PUT /api/v1/profile completed in 18ms (status=200)"},
+                new String[]{"INFO", "Feature flag cache reloaded (42 flags)"},
+                new String[]{"INFO", "HTTP GET /api/v1/orders completed in 15ms (status=200)"},
+                new String[]{"INFO", "Webhook delivered to https://hooks.example.com/orders (200)"},
+                new String[]{"ERROR", "Failed credit card authorization: card declined by issuing bank (PRTL-402)"},
+                new String[]{"INFO", "HTTP GET /api/v1/catalog completed in 12ms (status=200)"},
+                new String[]{"INFO", "Metrics flushed to collector (512 points)"}
         );
 
-        for (int i = 0; i < 40; i++) {
+        // Spread over the last hour, oldest first, so charts and alert windows have data on first boot.
+        int seedCount = 360;
+        Instant now = Instant.now();
+        for (int i = 0; i < seedCount; i++) {
             String svc = services[i % services.length];
-            String lvl = levels[i % levels.length];
+            String[] event = events.get((i * 7) % events.size());
+            String lvl = event[0];
             String env = envs[i % envs.length];
-            String msg = messages.get(i % messages.size());
+            String msg = event[1];
 
             logService.ingestLog(LogEntryDto.builder()
+                    .fullTimestamp(now.minusSeconds((long) (seedCount - i) * 10).toString())
                     .service(svc)
                     .level(lvl)
                     .environment(env)

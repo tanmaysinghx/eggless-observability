@@ -1,6 +1,7 @@
 package io.eggless.sdk.logback;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import java.time.Instant;
 import ch.qos.logback.classic.spi.IThrowableProxy;
 import ch.qos.logback.classic.spi.ThrowableProxyUtil;
 import ch.qos.logback.core.UnsynchronizedAppenderBase;
@@ -41,6 +42,7 @@ public class EgglessLogbackAppender extends UnsynchronizedAppenderBase<ILoggingE
         payload.setLevel(event.getLevel().toString());
         payload.setMessage(event.getFormattedMessage());
         payload.setEnvironment(environment);
+        payload.setFullTimestamp(Instant.ofEpochMilli(event.getTimeStamp()).toString());
 
         Map<String, String> mdcPropertyMap = event.getMDCPropertyMap();
         if (mdcPropertyMap != null && !mdcPropertyMap.isEmpty()) {

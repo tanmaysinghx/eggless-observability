@@ -48,6 +48,15 @@ eggless:
   # Base64 32-byte AES key for the stored Portal credentials. Generated into
   # ~/.eggless/secrets/connection.key when unset; back it up with the database.
   secret-key: ${EGGLESS_SECRET_KEY:}
+  ingest:
+    # Log ingestion (POST /api/v1/logs, /logs/ingest, /logs/batch) requires an API key from
+    # Settings → API Keys, sent as X-API-Key. Set to false only on a trusted network.
+    require-api-key: ${EGGLESS_INGEST_REQUIRE_API_KEY:true}
+  retention:
+    # Logs older than this are deleted hourly. 0 keeps logs forever.
+    days: ${EGGLESS_RETENTION_DAYS:7}
+  alerts:
+    evaluation-interval-ms: ${EGGLESS_ALERT_INTERVAL_MS:30000}
 
 # Portal SSO Integration Configuration
 # Two ways to configure it:

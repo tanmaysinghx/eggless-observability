@@ -1,8 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, combineLatest, interval, of } from 'rxjs';
-import { map, catchError, retry, tap } from 'rxjs/operators';
-import { LogEntry, LogFilter, LogStats, ApplicationInfo, AlertRule, ApiKey, Environment, LogLevel } from '../models/log.model';
+import { BehaviorSubject, Observable, combineLatest, interval, of, throwError, timer } from 'rxjs';
+import { map, catchError, debounceTime, distinctUntilChanged, retry, shareReplay, startWith, switchMap } from 'rxjs/operators';
+import { LogEntry, LogFilter, LogStats, ApplicationInfo, AlertRule, ApiKey, Environment, LogLevel, MetricsSummary, SystemInfo } from '../models/log.model';
+import { matchesQuery, parseQuery } from './log-query';
 
 @Injectable({
   providedIn: 'root'
@@ -27,6 +28,10 @@ export class LogService {
 
   private logsSubject = new BehaviorSubject<LogEntry[]>([]);
   public logs$: Observable<LogEntry[]> = this.logsSubject.asObservable();
+
+  /** Number of stored logs matching the current filter (the table holds at most the newest 500). */
+  private totalMatchingSubject = new BehaviorSubject<number>(0);
+  public totalMatching$: Observable<number> = this.totalMatchingSubject.asObservable();
 
   private filterSubject = new BehaviorSubject<LogFilter>({
     searchQuery: '',
@@ -65,7 +70,22 @@ export class LogService {
   }
 
   private startDataPolling() {
-    this.fetchLogs();
+    // Re-query the server whenever any filter changes; the server applies the search syntax.
+    combineLatest([this.filter$, this.selectedApp$, this.selectedEnv$]).pipe(
+      debounceTime(250),
+      map(([filter, app, env]) => this.buildQueryParams(filter, app, env)),
+      distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b)),
+      switchMap(params => this.http.get<any>(`${this.apiBase}/logs`, { params }).pipe(
+        retry(2),
+        catchError(() => of(null))
+      ))
+    ).subscribe(res => {
+      if (res && res.data && res.data.logs) {
+        this.logsSubject.next(res.data.logs);
+        this.totalMatchingSubject.next(res.data.total ?? res.data.logs.length);
+      }
+    });
+
     this.fetchAlerts();
     this.fetchApiKeys();
     this.fetchApplications();
@@ -76,14 +96,21 @@ export class LogService {
     });
   }
 
-  private fetchLogs() {
-    this.http.get<any>(`${this.apiBase}/logs?limit=500`)
-      .pipe(retry(3), catchError(() => of(null)))
-      .subscribe(res => {
-        if (res && res.data && res.data.logs) {
-          this.logsSubject.next(res.data.logs);
-        }
-      });
+  private buildQueryParams(filter: LogFilter, app: string, env: Environment | 'all'): Record<string, string> {
+    // Level chips become level: terms, which the server ORs together.
+    const levelTerms = filter.levels.map(l => `level:${l}`).join(' ');
+    const search = [filter.searchQuery.trim(), levelTerms].filter(Boolean).join(' ');
+    const params: Record<string, string> = { limit: '500', timeRange: filter.timeRange };
+    const service = app !== 'all' ? app : filter.services[0];
+    if (service) params['service'] = service;
+    if (env !== 'all') params['environment'] = env;
+    if (search) params['search'] = search;
+    return params;
+  }
+
+  /** Re-runs the current query, e.g. after the user presses refresh. */
+  public refresh() {
+    this.filterSubject.next({ ...this.filterSubject.value });
   }
 
   private fetchAlerts() {
@@ -124,8 +151,10 @@ export class LogService {
           if (!this.liveTailSubject.value) return;
           try {
             const newEntry: LogEntry = JSON.parse(event.data);
+            if (!this.matchesCurrentFilter(newEntry)) return;
             const current = this.logsSubject.value;
             this.logsSubject.next([newEntry, ...current.slice(0, 800)]);
+            this.totalMatchingSubject.next(this.totalMatchingSubject.value + 1);
           } catch (e) {}
         };
         this.ws.onclose = () => {
@@ -138,59 +167,60 @@ export class LogService {
     connect();
   }
 
-  public filteredLogs$: Observable<LogEntry[]> = combineLatest([
-    this.logs$,
-    this.filter$,
-    this.selectedApp$,
-    this.selectedEnv$
-  ]).pipe(
-    map(([logs, filter, app, env]) => {
-      return logs.filter(log => {
-        if (app !== 'all' && log.service !== app) return false;
-        if (filter.services.length > 0 && !filter.services.includes(log.service)) return false;
-        if (env !== 'all' && log.environment !== env) return false;
-        if (filter.environments.length > 0 && !filter.environments.includes(log.environment)) return false;
-        if (filter.levels.length > 0 && !filter.levels.includes(log.level)) return false;
+  /** Live-tail entries are added only if they would have matched the server query. */
+  private matchesCurrentFilter(log: LogEntry): boolean {
+    const filter = this.filterSubject.value;
+    const app = this.selectedAppSubject.value;
+    const env = this.selectedEnvSubject.value;
+    if (app !== 'all' && log.service !== app) return false;
+    if (filter.services.length > 0 && !filter.services.includes(log.service)) return false;
+    if (env !== 'all' && log.environment !== env) return false;
+    if (filter.levels.length > 0 && !filter.levels.includes(log.level)) return false;
+    return matchesQuery(log, parseQuery(filter.searchQuery));
+  }
 
-        if (filter.searchQuery && filter.searchQuery.trim() !== '') {
-          const q = filter.searchQuery.toLowerCase().trim();
-          if (q.startsWith('level:')) {
-            const levelVal = q.replace('level:', '').trim().toUpperCase();
-            if (log.level !== levelVal) return false;
-          } else if (q.startsWith('service:')) {
-            const serviceVal = q.replace('service:', '').trim();
-            if (log.service.toLowerCase() !== serviceVal) return false;
-          } else if (q.startsWith('userid:')) {
-            const userVal = q.replace('userid:', '').trim();
-            if (!log.userId?.toLowerCase().includes(userVal)) return false;
-          } else {
-            const msgMatch = log.message.toLowerCase().includes(q);
-            const traceMatch = log.traceId?.toLowerCase().includes(q) || false;
-            const reqMatch = log.requestId?.toLowerCase().includes(q) || false;
-            const serviceMatch = log.service.toLowerCase().includes(q);
-            if (!msgMatch && !traceMatch && !reqMatch && !serviceMatch) {
-              return false;
-            }
-          }
-        }
-        return true;
-      });
-    })
+  /** Logs matching the current filters (already filtered by the server). */
+  public filteredLogs$: Observable<LogEntry[]> = this.logs$;
+
+  /** The newest logs of one application, independent of the explorer filters. */
+  public recentLogs(service: string, limit = 25): Observable<LogEntry[]> {
+    return this.http.get<any>(`${this.apiBase}/logs`, { params: { service, limit: String(limit) } }).pipe(
+      map(res => (res && res.data ? res.data.logs as LogEntry[] : [])),
+      catchError(() => of([]))
+    );
+  }
+
+  /** Server-side aggregates for a time range, refreshed every 15s while subscribed. */
+  public metrics(timeRange: string, service?: string, environment?: string): Observable<MetricsSummary | null> {
+    const params: Record<string, string> = { timeRange };
+    if (service && service !== 'all') params['service'] = service;
+    if (environment && environment !== 'all') params['environment'] = environment;
+    return timer(0, 15000).pipe(
+      switchMap(() => this.http.get<any>(`${this.apiBase}/metrics/summary`, { params }).pipe(
+        map(res => (res && res.data ? res.data as MetricsSummary : null)),
+        catchError(() => of(null))
+      ))
+    );
+  }
+
+  public stats$: Observable<LogStats> = combineLatest([this.filter$, this.selectedApp$, this.selectedEnv$]).pipe(
+    debounceTime(250),
+    switchMap(([filter, app, env]) => this.metrics(filter.timeRange, app, env)),
+    map(m => ({
+      totalLogs: m?.totalLogs ?? 0,
+      errorCount: m?.errorCount ?? 0,
+      warnCount: m?.warnCount ?? 0,
+      activeApplications: m?.activeServices ?? 0,
+      logsPerMin: Math.round(m?.logsPerMin ?? 0)
+    })),
+    startWith({ totalLogs: 0, errorCount: 0, warnCount: 0, activeApplications: 0, logsPerMin: 0 }),
+    shareReplay({ bufferSize: 1, refCount: true })
   );
 
-  public stats$: Observable<LogStats> = this.filteredLogs$.pipe(
-    map(logs => {
-      const errorCount = logs.filter(l => l.level === 'ERROR').length;
-      const warnCount = logs.filter(l => l.level === 'WARN').length;
-      const services = new Set(logs.map(l => l.service));
-      return {
-        totalLogs: logs.length,
-        errorCount,
-        warnCount,
-        activeApplications: services.size,
-        logsPerMin: Math.round(logs.length * 1.8)
-      };
-    })
+  public systemInfo$: Observable<SystemInfo | null> = this.http.get<any>(`${this.apiBase}/system/info`).pipe(
+    map(res => (res && res.data ? res.data as SystemInfo : null)),
+    catchError(() => of(null)),
+    shareReplay(1)
   );
 
   public applications$: Observable<ApplicationInfo[]> = this.appsSubject.asObservable();
@@ -229,13 +259,15 @@ export class LogService {
     this.selectedEnvSubject.next(env);
   }
 
-  public addAlertRule(rule: Omit<AlertRule, 'id' | 'status'>) {
-    this.http.post<any>(`${this.apiBase}/alerts`, rule)
-      .subscribe(res => {
-        if (res && res.success) {
-          this.fetchAlerts();
-        }
-      });
+  /** Creates a rule; errors carry the server's validation message. */
+  public addAlertRule(rule: Omit<AlertRule, 'id' | 'status'>): Observable<AlertRule> {
+    return this.http.post<any>(`${this.apiBase}/alerts`, rule).pipe(
+      map(res => {
+        this.fetchAlerts();
+        return res.data as AlertRule;
+      }),
+      catchError(err => throwError(() => new Error(err?.error?.error || 'Failed to create alert rule')))
+    );
   }
 
   public toggleAlertRule(id: string) {

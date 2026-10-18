@@ -22,6 +22,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ApiKeyService {
 
+    private static final DateTimeFormatter LAST_USED_FORMAT = DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm 'UTC'")
+            .withZone(ZoneOffset.UTC);
+
     private final ApiKeyRepository apiKeyRepository;
 
     @Transactional(readOnly = true)
@@ -66,12 +69,25 @@ public class ApiKeyService {
         });
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * True when the token belongs to an active key. Records when the key was last used, at most
+     * once a minute so ingestion does not write the key row on every request.
+     */
+    @Transactional
     public boolean validateToken(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) return false;
-        String hash = hashToken(rawToken);
+        String hash = hashToken(rawToken.trim());
         return apiKeyRepository.findByTokenHash(hash)
-                .map(k -> "active".equalsIgnoreCase(k.getStatus()))
+                .filter(k -> "active".equalsIgnoreCase(k.getStatus()))
+                .map(k -> {
+                    Instant now = Instant.now();
+                    if (k.getLastUsedAt() == null || k.getLastUsedAt().isBefore(now.minusSeconds(60))) {
+                        k.setLastUsedAt(now);
+                        k.setLastUsed(LAST_USED_FORMAT.format(now));
+                        apiKeyRepository.save(k);
+                    }
+                    return true;
+                })
                 .orElse(false);
     }
 

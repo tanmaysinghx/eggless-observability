@@ -1,8 +1,10 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { map } from 'rxjs/operators';
 import { LogService } from '../../core/services/log.service';
-import { ApplicationInfo } from '../../core/models/log.model';
+import { ApplicationInfo, LogEntry, MetricsSummary } from '../../core/models/log.model';
+import { Observable, of } from 'rxjs';
 
 @Component({
   selector: 'app-applications',
@@ -18,9 +20,9 @@ import { ApplicationInfo } from '../../core/models/log.model';
         </div>
 
         <div class="flex items-center gap-3">
-          <div class="px-3 py-1.5 rounded-md bg-[#161e2c] border border-[#20293a] text-[#34d399] font-mono text-xs flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></span>
-            6 / 6 Services Healthy
+          <div *ngIf="health$ | async as h" class="px-3 py-1.5 rounded-md bg-[#161e2c] border border-[#20293a] font-mono text-xs flex items-center gap-2" [ngClass]="h.healthy === h.total ? 'text-[#34d399]' : 'text-[#fbbf24]'">
+            <span class="w-2 h-2 rounded-full animate-pulse" [ngClass]="h.healthy === h.total ? 'bg-[#10b981]' : 'bg-[#f59e0b]'"></span>
+            {{ h.healthy }} / {{ h.total }} Services Healthy
           </div>
         </div>
       </div>
@@ -35,7 +37,7 @@ import { ApplicationInfo } from '../../core/models/log.model';
               <th class="py-3 px-4 font-mono">Last Log</th>
               <th class="py-3 px-4 font-mono">Logs / Min</th>
               <th class="py-3 px-4 font-mono">Errors (5m)</th>
-              <th class="py-3 px-4">Uptime</th>
+              <th class="py-3 px-4" title="Share of logs in the last 24h that were not ERROR/FATAL">24h Success</th>
               <th class="py-3 px-4">Status</th>
               <th class="py-3 px-4 text-right">Actions</th>
             </tr>
@@ -145,25 +147,25 @@ import { ApplicationInfo } from '../../core/models/log.model';
           <div class="p-4 bg-[#121722] border border-[#20293a] rounded-lg">
             <div class="text-[#64748b] text-[10px] font-bold uppercase">Logs Ingestion Rate</div>
             <div class="text-xl font-bold text-[#f0f4f8] font-mono mt-1">{{ selectedApp.logsPerMin | number }} / min</div>
-            <div class="text-[#10b981] text-[10px] mt-1 font-mono">↑ 4.2% from previous hour</div>
+            <div class="text-[#64748b] text-[10px] mt-1 font-mono">Average over the last 5 minutes</div>
           </div>
 
           <div class="p-4 bg-[#121722] border border-[#20293a] rounded-lg">
-            <div class="text-[#64748b] text-[10px] font-bold uppercase">Errors (5m)</div>
-            <div class="text-xl font-bold text-[#f87171] font-mono mt-1">{{ selectedApp.errorCount }} errors</div>
-            <div class="text-[#f87171] text-[10px] mt-1 font-mono">Gateway timeout exceptions</div>
+            <div class="text-[#64748b] text-[10px] font-bold uppercase">Errors (24h)</div>
+            <div class="text-xl font-bold text-[#f87171] font-mono mt-1">{{ selectedApp.errorCount | number }} errors</div>
+            <div class="text-[#f87171] text-[10px] mt-1 font-mono">{{ selectedApp.errorsPerMin | number }} / min right now</div>
           </div>
 
           <div class="p-4 bg-[#121722] border border-[#20293a] rounded-lg">
             <div class="text-[#64748b] text-[10px] font-bold uppercase">Last Ingested Log</div>
             <div class="text-xl font-bold text-[#34d399] font-mono mt-1">{{ selectedApp.lastLog }}</div>
-            <div class="text-[#64748b] text-[10px] mt-1 font-mono">Heartbeat OK</div>
+            <div class="text-[10px] mt-1 font-mono" [ngClass]="selectedApp.status === 'healthy' ? 'text-[#34d399]' : 'text-[#fbbf24]'">Status: {{ selectedApp.status }}</div>
           </div>
 
           <div class="p-4 bg-[#121722] border border-[#20293a] rounded-lg">
-            <div class="text-[#64748b] text-[10px] font-bold uppercase">SLA Uptime</div>
+            <div class="text-[#64748b] text-[10px] font-bold uppercase">24h Success Rate</div>
             <div class="text-xl font-bold text-[#34d399] font-mono mt-1">{{ selectedApp.uptime }}</div>
-            <div class="text-[#34d399] text-[10px] mt-1 font-mono">30-day window target 99.9%</div>
+            <div class="text-[#34d399] text-[10px] mt-1 font-mono">Non-error share of logs, last 24h</div>
           </div>
         </div>
 
@@ -173,67 +175,39 @@ import { ApplicationInfo } from '../../core/models/log.model';
             <button
               (click)="activeTab = 'logs'"
               [ngClass]="activeTab === 'logs' ? 'border-[#f59e0b] text-[#f59e0b] font-bold' : 'border-transparent text-[#64748b] hover:text-[#94a3b8]'"
-              class="py-2 border-b-2 text-xs transition-colors"
+              class="pb-2 border-b-2 transition-colors"
             >
-              Logs Preview
+              Recent Logs
             </button>
             <button
               (click)="activeTab = 'errors'"
               [ngClass]="activeTab === 'errors' ? 'border-[#f59e0b] text-[#f59e0b] font-bold' : 'border-transparent text-[#64748b] hover:text-[#94a3b8]'"
-              class="py-2 border-b-2 text-xs transition-colors"
+              class="pb-2 border-b-2 transition-colors"
             >
-              Top Errors & Exceptions
-            </button>
-            <button
-              (click)="activeTab = 'config'"
-              [ngClass]="activeTab === 'config' ? 'border-[#f59e0b] text-[#f59e0b] font-bold' : 'border-transparent text-[#64748b] hover:text-[#94a3b8]'"
-              class="py-2 border-b-2 text-xs transition-colors"
-            >
-              Service Configuration
+              Top Errors (24h)
             </button>
           </div>
 
-          <!-- TAB: Logs Preview -->
-          <div *ngIf="activeTab === 'logs'" class="space-y-3">
-            <div class="text-xs text-[#94a3b8]">Live log stream for {{ selectedApp.name }}:</div>
-            <div class="p-3 bg-[#0b0e14] border border-[#20293a] rounded font-mono text-[11px] space-y-1 max-h-60 overflow-y-auto">
-              <div class="text-[#34d399]">[INFO] Payment request received for order ORD-93821</div>
-              <div class="text-[#34d399]">[INFO] Processing payment via Stripe Gateway</div>
-              <div class="text-[#fbbf24]">[WARN] Payment gateway response slow: 1840ms latency</div>
-              <div class="text-[#f87171]">[ERROR] GatewayTimeoutException: Stripe SDK timeout</div>
-              <div class="text-[#34d399]">[INFO] Retrying payment with backup provider Adyen</div>
+          <!-- TAB: Recent Logs -->
+          <div *ngIf="activeTab === 'logs'" class="space-y-2">
+            <div class="text-[#64748b]">Latest logs from {{ selectedApp.name }}:</div>
+            <div class="bg-[#0b0e14] border border-[#20293a] rounded p-3 font-mono text-[11px] space-y-1 max-h-72 overflow-y-auto">
+              <div *ngFor="let l of (recentLogs$ | async)" class="truncate" [ngClass]="levelClass(l.level)">
+                <span class="text-[#64748b]">{{ l.timestamp }}</span> [{{ l.level }}] {{ l.message }}
+              </div>
+              <div *ngIf="(recentLogs$ | async)?.length === 0" class="text-[#64748b] font-sans">No logs yet.</div>
             </div>
           </div>
 
           <!-- TAB: Errors -->
-          <div *ngIf="activeTab === 'errors'" class="space-y-3 font-mono text-xs">
-            <div class="p-3 bg-[#180e12] border border-[#ef4444]/30 rounded text-[#f87171]">
-              <div class="font-bold">GatewayTimeoutException (Stripe SDK)</div>
-              <div class="text-[11px] text-[#94a3b8] mt-1">Occurred 18 times in last 15 minutes.</div>
-              <pre class="mt-2 text-[10px] text-[#fca5a5] bg-[#0b0e14] p-2 rounded">StripeException: GatewayTimeoutException at PaymentClient.java:142</pre>
-            </div>
-          </div>
-
-          <!-- TAB: Config -->
-          <div *ngIf="activeTab === 'config'" class="space-y-3 text-xs">
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-[#64748b] font-semibold mb-1">Ingestion Log Level</label>
-                <select class="w-full bg-[#161e2c] text-[#f0f4f8] p-2 rounded border border-[#20293a]">
-                  <option>INFO (Default)</option>
-                  <option>WARN</option>
-                  <option>ERROR</option>
-                  <option>DEBUG</option>
-                </select>
+          <div *ngIf="activeTab === 'errors'" class="space-y-2">
+            <ng-container *ngIf="appMetrics$ | async as m">
+              <div *ngFor="let e of m.topErrors" class="p-3 bg-[#180e12] border border-[#ef4444]/30 rounded space-y-1">
+                <div class="text-[#f87171] font-mono font-semibold break-words">{{ e.message }}</div>
+                <div class="text-[#94a3b8]">Occurred {{ e.count | number }} times · last seen {{ e.lastSeen | date:'MMM d, HH:mm:ss' }}</div>
               </div>
-              <div>
-                <label class="block text-[#64748b] font-semibold mb-1">Retention Window</label>
-                <select class="w-full bg-[#161e2c] text-[#f0f4f8] p-2 rounded border border-[#20293a]">
-                  <option>30 Days Hot Storage</option>
-                  <option>90 Days Cold Archive</option>
-                </select>
-              </div>
-            </div>
+              <div *ngIf="m.topErrors.length === 0" class="text-[#64748b]">No errors in the last 24 hours.</div>
+            </ng-container>
           </div>
         </div>
       </div>
@@ -245,11 +219,26 @@ export class ApplicationsComponent {
   private router = inject(Router);
 
   apps$ = this.logService.applications$;
+  health$ = this.apps$.pipe(map(apps => ({ total: apps.length, healthy: apps.filter(a => a.status === 'healthy').length })));
   selectedApp: ApplicationInfo | null = null;
-  activeTab: 'logs' | 'errors' | 'config' = 'logs';
+  activeTab: 'logs' | 'errors' = 'logs';
+  recentLogs$: Observable<LogEntry[]> = of([]);
+  appMetrics$: Observable<MetricsSummary | null> = of(null);
 
   openAppDetail(app: ApplicationInfo) {
     this.selectedApp = app;
+    this.activeTab = 'logs';
+    this.recentLogs$ = this.logService.recentLogs(app.name, 25);
+    this.appMetrics$ = this.logService.metrics('24h', app.name);
+  }
+
+  levelClass(level: string): string {
+    switch (level) {
+      case 'ERROR': case 'FATAL': return 'text-[#f87171]';
+      case 'WARN': return 'text-[#fbbf24]';
+      case 'DEBUG': return 'text-[#c084fc]';
+      default: return 'text-[#e6edf3]';
+    }
   }
 
   viewAppLogs(appName: string) {

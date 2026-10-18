@@ -1,6 +1,7 @@
 package io.eggless.sdk.core.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -16,9 +17,12 @@ public class LogPayload {
     private String host;
     private Map<String, Object> metadata;
     private String stackTrace;
+    /** ISO-8601 instant the event happened; defaults to creation time so batching delay does not skew it. */
+    private String fullTimestamp;
 
     public LogPayload() {
         this.metadata = new HashMap<>();
+        this.fullTimestamp = Instant.now().toString();
     }
 
     public LogPayload(String service, String level, String message) {
@@ -113,5 +117,13 @@ public class LogPayload {
 
     public void setStackTrace(String stackTrace) {
         this.stackTrace = stackTrace;
+    }
+
+    public String getFullTimestamp() {
+        return fullTimestamp;
+    }
+
+    public void setFullTimestamp(String fullTimestamp) {
+        this.fullTimestamp = fullTimestamp;
     }
 }

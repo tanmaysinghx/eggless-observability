@@ -161,6 +161,7 @@ eggless:
 ```bash
 curl -X POST "http://localhost:8080/api/v1/logs" \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: egg_sec_..." \
   -d '{
     "service": "billing-service",
     "level": "INFO",
@@ -171,6 +172,24 @@ curl -X POST "http://localhost:8080/api/v1/logs" \
     "metadata": { "amount": 99.00, "currency": "USD" }
   }'
 ```
+
+Ingestion requires an API key: create one under **Settings → API Keys** and send it as `X-API-Key` (or `Authorization: Bearer ...`). Send up to 1000 logs at once to `POST /api/v1/logs/batch`. Set `fullTimestamp` (ISO-8601) to record when the event happened; otherwise the receive time is used.
+
+### Search syntax
+The Logs Explorer and alert rules share one query language: terms joined by `AND` (or spaces).
+`level:ERROR`, `service:payment-api`, `env:production`, `host:node-1`, `trace:trc_...`, `user:usr_42`, `message:'invalid token'`, plus free text, which matches message, trace, request, user and service.
+
+### Alert rules
+A rule counts the logs that match its query over its window and fires when the condition holds:
+`count > 100`, `ERROR >= 10`, `error_count > 5`, `error_rate > 5%`. If the channel contains an `http(s)://` URL, Eggless POSTs a JSON message with `text` and `content` fields (Slack, Mattermost and Discord compatible) when the rule fires.
+
+### Server settings
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `EGGLESS_INGEST_REQUIRE_API_KEY` | `true` | Require an API key for log ingestion |
+| `EGGLESS_RETENTION_DAYS` | `7` | Delete logs older than this, hourly (`0` keeps them forever) |
+| `EGGLESS_ALERT_INTERVAL_MS` | `30000` | How often alert rules are evaluated |
 
 ---
 

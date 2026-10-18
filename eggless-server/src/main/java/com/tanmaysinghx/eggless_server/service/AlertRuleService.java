@@ -2,6 +2,8 @@ package com.tanmaysinghx.eggless_server.service;
 
 import com.tanmaysinghx.eggless_server.dto.AlertRuleDto;
 import com.tanmaysinghx.eggless_server.entity.AlertRuleEntity;
+import com.tanmaysinghx.eggless_server.query.AlertCondition;
+import com.tanmaysinghx.eggless_server.query.LogQuery;
 import com.tanmaysinghx.eggless_server.repository.AlertRuleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,14 +29,24 @@ public class AlertRuleService {
 
     @Transactional
     public AlertRuleDto createRule(AlertRuleDto dto) {
+        if (dto.getName() == null || dto.getName().isBlank()) {
+            throw new IllegalArgumentException("Alert rule name is required");
+        }
+        String condition = dto.getCondition() != null ? dto.getCondition() : "error_count > 50";
+        String window = dto.getWindow() != null ? dto.getWindow() : "5m";
+        AlertCondition.parse(condition);
+        if (LogQuery.parseWindow(window) == null) {
+            throw new IllegalArgumentException("Window must look like 30s, 5m, 1h or 1d (got: " + window + ")");
+        }
+
         AlertRuleEntity entity = AlertRuleEntity.builder()
                 .id("alt_" + UUID.randomUUID().toString().substring(0, 8))
                 .name(dto.getName())
                 .application(dto.getApplication() != null ? dto.getApplication() : "all")
                 .query(dto.getQuery())
-                .condition(dto.getCondition() != null ? dto.getCondition() : "error_count > 50")
-                .window(dto.getWindow() != null ? dto.getWindow() : "5m")
-                .channel(dto.getChannel() != null ? dto.getChannel() : "Slack #alerts")
+                .condition(condition)
+                .window(window)
+                .channel(dto.getChannel() != null && !dto.getChannel().isBlank() ? dto.getChannel() : "In-app only")
                 .enabled(true)
                 .status("ok")
                 .createdAt(Instant.now())

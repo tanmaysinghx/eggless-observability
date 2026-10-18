@@ -1,4 +1,6 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { take } from 'rxjs/operators';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LogService } from '../../core/services/log.service';
@@ -109,7 +111,7 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
           <div class="flex items-center bg-[#111622] p-0.5 rounded border border-[#20293a] shrink-0">
             <button
               *ngFor="let range of timeRanges"
-              (click)="selectedTimeRange = range"
+              (click)="setTimeRange(range)"
               [ngClass]="selectedTimeRange === range ? 'bg-[#1c273a] text-[#f59e0b] font-medium' : 'text-[#64748b] hover:text-[#94a3b8]'"
               class="px-2 py-1 rounded text-[11px] transition-colors"
             >
@@ -332,6 +334,9 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
               Showing <span class="font-semibold text-[#f0f4f8] font-mono">{{ getStartIndex() }}</span> -
               <span class="font-semibold text-[#f0f4f8] font-mono">{{ getEndIndex() }}</span> of
               <span class="font-semibold text-[#f0f4f8] font-mono">{{ totalFilteredLogs }}</span> logs
+              <span *ngIf="totalMatching > totalFilteredLogs" class="text-[#64748b]">
+                (newest of {{ totalMatching | number }} matching — narrow the search to see older ones)
+              </span>
             </div>
 
             <div class="flex items-center gap-2">
@@ -374,6 +379,7 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
 })
 export class LogsExplorerComponent implements OnInit {
   private logService = inject(LogService);
+  private destroyRef = inject(DestroyRef);
 
   filteredLogs$ = this.logService.filteredLogs$;
   stats$ = this.logService.stats$;
@@ -388,12 +394,13 @@ export class LogsExplorerComponent implements OnInit {
   selectedLog: LogEntry | null = null;
   activeLevels: LogLevel[] = [];
 
-  timeRanges = ['15m', '1h', '6h', '24h', 'Custom'];
+  timeRanges = ['15m', '1h', '6h', '24h', '7d'];
   selectedTimeRange = '1h';
 
   currentPage = 1;
   pageSize = 50;
   totalFilteredLogs = 0;
+  totalMatching = 0;
   paginatedLogs: LogEntry[] = [];
 
   columns = [
@@ -405,11 +412,26 @@ export class LogsExplorerComponent implements OnInit {
     { key: 'environment', label: 'Environment', visible: true }
   ];
 
+  private currentLogs: LogEntry[] = [];
+
   ngOnInit() {
-    this.filteredLogs$.subscribe(logs => {
+    this.filteredLogs$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(logs => {
+      this.currentLogs = logs;
       this.totalFilteredLogs = logs.length;
       this.updatePagination(logs);
     });
+    this.logService.totalMatching$.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(total => this.totalMatching = total);
+    this.logService.filter$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(filter => {
+      this.activeLevels = filter.levels;
+      this.selectedTimeRange = filter.timeRange;
+      this.searchQuery = filter.searchQuery;
+    });
+  }
+
+  setTimeRange(range: string) {
+    this.logService.setFilter({ timeRange: range });
+    this.currentPage = 1;
   }
 
   onSearchChange(q: string) {
@@ -458,6 +480,7 @@ export class LogsExplorerComponent implements OnInit {
 
   refreshLogs() {
     this.logService.setSearchQuery(this.searchQuery);
+    this.logService.refresh();
   }
 
   copyLogMessage(log: LogEntry) {
@@ -465,7 +488,7 @@ export class LogsExplorerComponent implements OnInit {
   }
 
   exportLogs(format: 'csv' | 'json') {
-    this.filteredLogs$.subscribe(logs => {
+    this.filteredLogs$.pipe(take(1)).subscribe(logs => {
       if (format === 'json') {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(logs, null, 2));
         const anchor = document.createElement('a');
@@ -524,14 +547,14 @@ export class LogsExplorerComponent implements OnInit {
   prevPage() {
     if (this.currentPage > 1) {
       this.currentPage--;
-      this.filteredLogs$.subscribe(logs => this.updatePagination(logs));
+      this.updatePagination(this.currentLogs);
     }
   }
 
   nextPage() {
     if (this.currentPage < this.totalPages) {
       this.currentPage++;
-      this.filteredLogs$.subscribe(logs => this.updatePagination(logs));
+      this.updatePagination(this.currentLogs);
     }
   }
 }

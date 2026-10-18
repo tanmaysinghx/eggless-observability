@@ -17,7 +17,7 @@ public class AlertRuleDto {
     private String condition;
     private String window;
     private String channel;
-    private boolean enabled;
+    private Boolean enabled;
     private String lastTriggered;
     private String status;
 }

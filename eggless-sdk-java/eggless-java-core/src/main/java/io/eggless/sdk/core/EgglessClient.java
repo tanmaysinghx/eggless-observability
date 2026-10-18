@@ -87,24 +87,26 @@ public class EgglessClient implements AutoCloseable {
         List<LogPayload> batch = new ArrayList<>();
         queue.drainTo(batch, config.getBatchSize());
 
-        for (LogPayload payload : batch) {
-            try {
-                String json = objectMapper.writeValueAsString(payload);
-                String endpoint = config.getServerUrl() + "/api/v1/logs/ingest";
+        if (batch.isEmpty()) {
+            return;
+        }
 
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(endpoint))
-                        .header("Content-Type", "application/json")
-                        .header("X-API-Key", config.getApiKey())
-                        .POST(HttpRequest.BodyPublishers.ofString(json))
-                        .timeout(Duration.ofSeconds(4))
-                        .build();
+        try {
+            String json = objectMapper.writeValueAsString(batch);
+            String endpoint = config.getServerUrl() + "/api/v1/logs/batch";
 
-                httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
-                        .exceptionally(ex -> null);
-            } catch (Exception ignored) {
-                // Silently prevent logging errors from failing application threads
-            }
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(endpoint))
+                    .header("Content-Type", "application/json")
+                    .header("X-API-Key", config.getApiKey() != null ? config.getApiKey() : "")
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .timeout(Duration.ofSeconds(4))
+                    .build();
+
+            httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
+                    .exceptionally(ex -> null);
+        } catch (Exception ignored) {
+            // Silently prevent logging errors from failing application threads
         }
     }
 

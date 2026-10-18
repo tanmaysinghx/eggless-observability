@@ -31,6 +31,8 @@ public class ApiKeyEntity {
 
     private String lastUsed;
 
+    private Instant lastUsedAt;
+
     @Column(length = 16)
     private String status; // active, revoked
 

@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
+import { map } from 'rxjs/operators';
 import { LogService } from '../../core/services/log.service';
 
 @Component({
@@ -41,25 +42,27 @@ import { LogService } from '../../core/services/log.service';
         <div class="p-4 bg-[#121722] border border-[#20293a] rounded-lg">
           <div class="text-[#64748b] text-[10px] font-bold uppercase tracking-wider">Total Ingested Logs</div>
           <div class="text-2xl font-bold text-[#f0f4f8] font-mono mt-1">{{ stats.totalLogs | number }}</div>
-          <div class="text-[#34d399] text-[10px] mt-1 font-mono">Streaming @ {{ stats.logsPerMin | number }}/min</div>
+          <div class="text-[#34d399] text-[10px] mt-1 font-mono">Last hour · {{ stats.logsPerMin | number }}/min</div>
         </div>
 
         <div class="p-4 bg-[#1a1215] border border-[#ef4444]/30 rounded-lg">
           <div class="text-[#f87171] text-[10px] font-bold uppercase tracking-wider">System Errors</div>
           <div class="text-2xl font-bold text-[#f87171] font-mono mt-1">{{ stats.errorCount | number }}</div>
-          <div class="text-[#f87171] text-[10px] mt-1 font-mono">1 active alert rule triggered</div>
+          <div class="text-[#f87171] text-[10px] mt-1 font-mono">{{ triggeredCount$ | async }} alert rule(s) triggered</div>
         </div>
 
         <div class="p-4 bg-[#1a1712] border border-[#f59e0b]/30 rounded-lg">
           <div class="text-[#fbbf24] text-[10px] font-bold uppercase tracking-wider">System Warnings</div>
           <div class="text-2xl font-bold text-[#fbbf24] font-mono mt-1">{{ stats.warnCount | number }}</div>
-          <div class="text-[#fbbf24] text-[10px] mt-1 font-mono">Slow gateway responses</div>
+          <div class="text-[#fbbf24] text-[10px] mt-1 font-mono">Last hour</div>
         </div>
 
         <div class="p-4 bg-[#121722] border border-[#20293a] rounded-lg">
           <div class="text-[#64748b] text-[10px] font-bold uppercase tracking-wider">Monitored Services</div>
           <div class="text-2xl font-bold text-[#34d399] font-mono mt-1">{{ stats.activeApplications }} microservices</div>
-          <div class="text-[#34d399] text-[10px] mt-1 font-mono">All status checks green</div>
+          <div *ngIf="health$ | async as h" class="text-[10px] mt-1 font-mono" [ngClass]="h.healthy === h.total ? 'text-[#34d399]' : 'text-[#fbbf24]'">
+            {{ h.healthy === h.total ? 'All status checks green' : (h.total - h.healthy) + ' of ' + h.total + ' need attention' }}
+          </div>
         </div>
       </div>
 
@@ -81,7 +84,7 @@ import { LogService } from '../../core/services/log.service';
                 </div>
                 <div class="text-[10px] text-[#64748b] font-sans mt-0.5">{{ app.logsPerMin | number }} logs/min</div>
               </div>
-              <span class="px-2 py-0.5 rounded text-[10px] font-sans font-bold" [ngClass]="app.status === 'healthy' ? 'bg-[#10b981]/15 text-[#34d399]' : 'bg-[#f59e0b]/15 text-[#fbbf24]'">
+              <span class="px-2 py-0.5 rounded text-[10px] font-sans font-bold" [ngClass]="app.status === 'healthy' ? 'bg-[#10b981]/15 text-[#34d399]' : app.status === 'warning' ? 'bg-[#f59e0b]/15 text-[#fbbf24]' : 'bg-[#ef4444]/15 text-[#f87171]'">
                 {{ app.status }}
               </span>
             </div>
@@ -119,4 +122,6 @@ export class OverviewComponent {
 
   stats$ = this.logService.stats$;
   apps$ = this.logService.applications$;
+  triggeredCount$ = this.logService.alerts$.pipe(map(rules => rules.filter(r => r.status === 'triggered').length));
+  health$ = this.apps$.pipe(map(apps => ({ total: apps.length, healthy: apps.filter(a => a.status === 'healthy').length })));
 }
