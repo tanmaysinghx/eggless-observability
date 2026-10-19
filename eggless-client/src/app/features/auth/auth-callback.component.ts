@@ -59,12 +59,6 @@ import { SsoService } from '../../core/services/sso.service';
               ← Back to Sign In
             </a>
 
-            <button
-              (click)="useDemoAccount()"
-              class="w-full py-2 bg-transparent text-slate-600 dark:text-[#94a3b8] hover:text-slate-900 dark:hover:text-white text-xs underline"
-            >
-              Continue with Developer Demo Account instead
-            </button>
           </div>
         </div>
       </div>
@@ -111,10 +105,5 @@ export class AuthCallbackComponent implements OnInit {
         this.errorMessage = err.message || 'Token exchange failed with Portal SSO server.';
       }
     });
-  }
-
-  useDemoAccount() {
-    this.ssoService.loginWithDemoPortalSso();
-    this.router.navigate(['/logs']);
   }
 }

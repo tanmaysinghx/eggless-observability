@@ -1,8 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, combineLatest, interval, of, throwError, timer } from 'rxjs';
-import { map, catchError, debounceTime, distinctUntilChanged, retry, shareReplay, startWith, switchMap } from 'rxjs/operators';
-import { LogEntry, LogFilter, LogStats, ApplicationInfo, ApplicationRegistration, AlertRule, ApiKey, Environment, LogLevel, MetricsSummary, NewApplication, SystemInfo } from '../models/log.model';
+import { map, catchError, debounceTime, distinctUntilChanged, retry, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
+import { LogEntry, LogFilter, LogStats, ApplicationInfo, ApplicationRegistration, AlertRule, AlertTestResult, ApiKey, Environment, LogLevel, MetricsSummary, NewApplication, SystemInfo } from '../models/log.model';
 import { matchesQuery, parseQuery } from './log-query';
 
 @Injectable({
@@ -64,6 +64,11 @@ export class LogService {
 
   private ws: WebSocket | null = null;
 
+  /** Page size of GET /logs; the explorer loads older logs one page at a time. */
+  private static readonly PAGE_SIZE = 500;
+  private lastQueryParams: Record<string, string> | null = null;
+  private pagesLoaded = 1;
+
   constructor() {
     this.startDataPolling();
     this.connectWebSocket();
@@ -75,6 +80,10 @@ export class LogService {
       debounceTime(250),
       map(([filter, app, env]) => this.buildQueryParams(filter, app, env)),
       distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b)),
+      tap(params => {
+        this.lastQueryParams = params;
+        this.pagesLoaded = 1;
+      }),
       switchMap(params => this.http.get<any>(`${this.apiBase}/logs`, { params }).pipe(
         retry(2),
         catchError(() => of(null))
@@ -100,7 +109,7 @@ export class LogService {
     // Level chips become level: terms, which the server ORs together.
     const levelTerms = filter.levels.map(l => `level:${l}`).join(' ');
     const search = [filter.searchQuery.trim(), levelTerms].filter(Boolean).join(' ');
-    const params: Record<string, string> = { limit: '500', timeRange: filter.timeRange };
+    const params: Record<string, string> = { limit: String(LogService.PAGE_SIZE), timeRange: filter.timeRange };
     const service = app !== 'all' ? app : filter.services[0];
     if (service) params['service'] = service;
     if (env !== 'all') params['environment'] = env;
@@ -111,6 +120,28 @@ export class LogService {
   /** Re-runs the current query, e.g. after the user presses refresh. */
   public refresh() {
     this.filterSubject.next({ ...this.filterSubject.value });
+  }
+
+  /**
+   * Appends the next page of older logs for the current query. Resolves to how many new logs were
+   * added (0 when there are no more). Overlap caused by logs arriving meanwhile is dropped by id.
+   */
+  public loadOlder(): Observable<number> {
+    if (!this.lastQueryParams) return of(0);
+    const params = { ...this.lastQueryParams, offset: String(this.pagesLoaded * LogService.PAGE_SIZE) };
+    return this.http.get<any>(`${this.apiBase}/logs`, { params }).pipe(
+      map(res => {
+        const older: LogEntry[] = res?.data?.logs ?? [];
+        const current = this.logsSubject.value;
+        const known = new Set(current.map(l => l.id));
+        const added = older.filter(l => !known.has(l.id));
+        if (older.length > 0) this.pagesLoaded++;
+        if (added.length > 0) this.logsSubject.next([...current, ...added]);
+        if (res?.data?.total != null) this.totalMatchingSubject.next(res.data.total);
+        return added.length;
+      }),
+      catchError(() => of(0))
+    );
   }
 
   private fetchAlerts() {
@@ -153,7 +184,8 @@ export class LogService {
             const newEntry: LogEntry = JSON.parse(event.data);
             if (!this.matchesCurrentFilter(newEntry)) return;
             const current = this.logsSubject.value;
-            this.logsSubject.next([newEntry, ...current.slice(0, 800)]);
+            // Keep at most 800 tailed rows, but never drop pages the user loaded with "load older".
+            this.logsSubject.next([newEntry, ...current].slice(0, Math.max(801, current.length)));
             this.totalMatchingSubject.next(this.totalMatchingSubject.value + 1);
           } catch (e) {}
         };
@@ -326,6 +358,25 @@ export class LogService {
     );
   }
 
+  /** Replaces a rule's definition; errors carry the server's validation message. */
+  public updateAlertRule(id: string, rule: Omit<AlertRule, 'id' | 'status' | 'enabled'>): Observable<AlertRule> {
+    return this.http.put<any>(`${this.apiBase}/alerts/${encodeURIComponent(id)}`, rule).pipe(
+      map(res => {
+        this.fetchAlerts();
+        return res.data as AlertRule;
+      }),
+      catchError(err => throwError(() => new Error(err?.error?.error || 'Failed to update alert rule')))
+    );
+  }
+
+  /** Measures a rule now and sends a test message to its webhook, without changing its state. */
+  public testAlertRule(id: string): Observable<AlertTestResult> {
+    return this.http.post<any>(`${this.apiBase}/alerts/${encodeURIComponent(id)}/test`, {}).pipe(
+      map(res => res.data as AlertTestResult),
+      catchError(err => throwError(() => new Error(err?.error?.error || 'Failed to test alert rule')))
+    );
+  }
+
   public toggleAlertRule(id: string) {
     this.http.put(`${this.apiBase}/alerts/toggle?id=${id}`, {})
       .subscribe(() => {
@@ -348,7 +399,8 @@ export class LogService {
           return res.data;
         }
         throw new Error('Failed to create API key');
-      })
+      }),
+      catchError(err => throwError(() => new Error(err?.error?.error || err?.message || 'Failed to create API key')))
     );
   }
 

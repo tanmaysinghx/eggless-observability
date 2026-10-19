@@ -1,4 +1,4 @@
-import { Component, inject, HostListener } from '@angular/core';
+import { Component, ElementRef, inject, HostListener, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, NavigationEnd } from '@angular/router';
@@ -39,6 +39,7 @@ import { RouterModule } from '@angular/router';
           </svg>
 
           <input
+            #globalSearch
             type="text"
             [(ngModel)]="globalSearchQuery"
             (keyup.enter)="onGlobalSearch()"
@@ -221,6 +222,7 @@ import { RouterModule } from '@angular/router';
           <div><span class="text-[#f59e0b]">level:error</span> - Filter ERROR logs</div>
           <div><span class="text-[#f59e0b]">service:payment-api</span> - Service log view</div>
           <div><span class="text-[#f59e0b]">"timeout"</span> - Exact phrase match</div>
+          <div><span class="text-[#f59e0b]">trace:trc_9982</span> - Every log of one trace</div>
           <div><span class="text-[#f59e0b]">userId:12345</span> - Inspect user activity</div>
         </div>
         <div class="mt-3 pt-2 border-t border-[#20293a] text-[11px]">
@@ -288,6 +290,18 @@ export class EgglessTopbarComponent {
   logout() {
     this.ssoService.logout();
     this.router.navigate(['/login']);
+  }
+
+  @ViewChild('globalSearch') private globalSearch?: ElementRef<HTMLInputElement>;
+
+  /** Ctrl + / (Cmd + / on macOS) focuses the global search from anywhere. */
+  @HostListener('document:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent) {
+    if ((event.ctrlKey || event.metaKey) && event.key === '/') {
+      event.preventDefault();
+      this.globalSearch?.nativeElement.focus();
+      this.globalSearch?.nativeElement.select();
+    }
   }
 
   @HostListener('document:click')

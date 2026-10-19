@@ -181,12 +181,19 @@ The Logs Explorer and alert rules share one query language: terms joined by `AND
 
 ### Alert rules
 A rule counts the logs that match its query over its window and fires when the condition holds:
-`count > 100`, `ERROR >= 10`, `error_count > 5`, `error_rate > 5%`. If the channel contains an `http(s)://` URL, Eggless POSTs a JSON message with `text` and `content` fields (Slack, Mattermost and Discord compatible) when the rule fires.
+`count > 100`, `ERROR >= 10`, `error_count > 5`, `error_rate > 5%`. Rules can be edited in place, and **Test** measures the rule now and sends a test message to its webhook without changing its state. If the channel contains an `http(s)://` URL, Eggless POSTs a JSON message with `text` and `content` fields (Slack, Mattermost and Discord compatible) when the rule fires.
+
+### Console sign-in
+The web console and the management API (`/api/v1/**`, plus the live-tail WebSocket) require a sign-in. After a Portal SSO sign-in the server sets an HttpOnly, SameSite=Lax session cookie (`EGGLESS_SESSION`). Log ingestion is not affected; it still uses API keys.
+
+No Portal yet? Set `EGGLESS_LOCAL_LOGIN=true` to get **Continue as local admin** on the sign-in page. Anyone who can reach the server then has full access, so only use it on your own machine or a trusted network.
 
 ### Server settings
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `EGGLESS_LOCAL_LOGIN` | `false` | Offer "Continue as local admin" without Portal SSO |
+| `EGGLESS_SESSION_HOURS` | `12` | How long a console sign-in lasts |
 | `EGGLESS_INGEST_REQUIRE_API_KEY` | `true` | Require an API key for log ingestion |
 | `EGGLESS_RETENTION_DAYS` | `7` | Delete logs older than this, hourly (`0` keeps them forever) |
 | `EGGLESS_ALERT_INTERVAL_MS` | `30000` | How often alert rules are evaluated |

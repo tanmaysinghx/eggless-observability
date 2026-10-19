@@ -77,6 +77,15 @@ export interface AlertRule {
   status: 'ok' | 'triggered' | 'disabled';
 }
 
+/** POST /alerts/{id}/test */
+export interface AlertTestResult {
+  value: number;
+  breached: boolean;
+  webhookConfigured: boolean;
+  webhookStatus?: number;
+  webhookError?: string;
+}
+
 export interface ApiKey {
   id: string;
   name: string;

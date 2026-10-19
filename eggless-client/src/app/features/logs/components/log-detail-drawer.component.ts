@@ -83,9 +83,12 @@ import { LogService } from '../../../core/services/log.service';
 
           <div>
             <div class="text-[10px] text-[#64748b] uppercase font-sans">Trace ID</div>
-            <div class="text-[#3b82f6] mt-0.5 truncate cursor-pointer hover:underline" (click)="copyText(log.traceId)">
+            <div class="text-[#3b82f6] mt-0.5 truncate cursor-pointer hover:underline" title="Copy trace ID" (click)="copyText(log.traceId)">
               {{ log.traceId }}
             </div>
+            <button *ngIf="log.traceId" (click)="showTrace.emit(log.traceId)" class="text-[10px] text-[#f59e0b] hover:underline font-sans mt-0.5">
+              All logs in this trace →
+            </button>
           </div>
 
           <div>
@@ -152,7 +155,8 @@ import { LogService } from '../../../core/services/log.service';
 export class LogDetailDrawerComponent {
   @Input() log: LogEntry | null = null;
   @Output() close = new EventEmitter<void>();
-  @Output() createAlert = new EventEmitter<{ app: string; query: string }>();
+  @Output() createAlert = new EventEmitter<{ app: string; query: string; name: string }>();
+  @Output() showTrace = new EventEmitter<string>();
 
   private logService = inject(LogService);
 
@@ -180,7 +184,8 @@ export class LogDetailDrawerComponent {
 
   createAlertFromLog() {
     if (!this.log) return;
-    const query = this.log.level === 'ERROR' ? `level:ERROR "${this.log.message.substring(0, 30)}"` : `service:${this.log.service}`;
-    this.createAlert.emit({ app: this.log.service, query });
+    const snippet = this.log.message.replace(/["']/g, '').substring(0, 30).trim();
+    const query = this.log.level === 'ERROR' ? `level:ERROR message:"${snippet}"` : `level:${this.log.level}`;
+    this.createAlert.emit({ app: this.log.service, query, name: `${this.log.service}: ${snippet}` });
   }
 }

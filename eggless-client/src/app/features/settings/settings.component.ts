@@ -61,7 +61,7 @@ import { ApiKey } from '../../core/models/log.model';
         <div class="bg-white dark:bg-[#121722] border border-slate-200 dark:border-[#20293a] rounded-xl p-5 space-y-4 shadow-sm">
           <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-[#20293a]">
             <div class="flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span class="w-2.5 h-2.5 rounded-full" [ngClass]="portalConfig.baseUrl ? 'bg-emerald-500' : 'bg-slate-400'"></span>
               <span class="font-semibold text-slate-900 dark:text-[#f0f4f8]">SSO Provider Parameters</span>
             </div>
             <button
@@ -79,10 +79,10 @@ import { ApiKey } from '../../core/models/log.model';
               <label class="block text-slate-600 dark:text-[#94a3b8] font-medium mb-1">Portal SSO Base URL</label>
               <input
                 type="text"
-                [(ngModel)]="portalConfig.baseUrl"
-                placeholder="https://portal.tanmaysinghx.com"
-                class="w-full bg-slate-50 dark:bg-[#0b0e14] text-slate-900 dark:text-[#f0f4f8] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] font-mono text-xs focus:outline-none focus:border-amber-500"
-              />
+                [value]="portalConfig.baseUrl || 'Not configured'"
+                readonly
+                class="w-full bg-slate-50 dark:bg-[#0b0e14] text-slate-900 dark:text-[#f0f4f8] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] font-mono text-xs focus:outline-none cursor-default"
+                />
               <span class="text-[10px] text-slate-400 dark:text-[#64748b]">Issuer root for OIDC discovery & token exchange</span>
             </div>
 
@@ -90,10 +90,10 @@ import { ApiKey } from '../../core/models/log.model';
               <label class="block text-slate-600 dark:text-[#94a3b8] font-medium mb-1">OAuth 2.1 Client ID</label>
               <input
                 type="text"
-                [(ngModel)]="portalConfig.clientId"
-                placeholder="eggless-observability"
-                class="w-full bg-slate-50 dark:bg-[#0b0e14] text-slate-900 dark:text-[#f0f4f8] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] font-mono text-xs focus:outline-none focus:border-amber-500"
-              />
+                [value]="portalConfig.clientId || 'Not configured'"
+                readonly
+                class="w-full bg-slate-50 dark:bg-[#0b0e14] text-slate-900 dark:text-[#f0f4f8] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] font-mono text-xs focus:outline-none cursor-default"
+                />
               <span class="text-[10px] text-slate-400 dark:text-[#64748b]">Public client identifier used for PKCE Authorization</span>
             </div>
 
@@ -101,10 +101,10 @@ import { ApiKey } from '../../core/models/log.model';
               <label class="block text-slate-600 dark:text-[#94a3b8] font-medium mb-1">Application ID (UUID)</label>
               <input
                 type="text"
-                [(ngModel)]="portalConfig.applicationId"
-                placeholder="3fa85f64-5717-4562-b3fc-2c963f66afa6"
-                class="w-full bg-slate-50 dark:bg-[#0b0e14] text-slate-900 dark:text-[#f0f4f8] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] font-mono text-xs focus:outline-none focus:border-amber-500"
-              />
+                [value]="portalConfig.applicationId || 'Not configured'"
+                readonly
+                class="w-full bg-slate-50 dark:bg-[#0b0e14] text-slate-900 dark:text-[#f0f4f8] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] font-mono text-xs focus:outline-none cursor-default"
+                />
               <span class="text-[10px] text-slate-400 dark:text-[#64748b]">Used for External Auth API endpoints (/api/external/apps/&#123;id&#125;/*)</span>
             </div>
 
@@ -112,24 +112,21 @@ import { ApiKey } from '../../core/models/log.model';
               <label class="block text-slate-600 dark:text-[#94a3b8] font-medium mb-1">Redirect URI</label>
               <input
                 type="text"
-                [(ngModel)]="portalConfig.redirectUri"
-                placeholder="http://localhost:4200/auth/callback"
-                class="w-full bg-slate-50 dark:bg-[#0b0e14] text-slate-900 dark:text-[#f0f4f8] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] font-mono text-xs focus:outline-none focus:border-amber-500"
-              />
+                [value]="portalConfig.redirectUri || 'Not configured'"
+                readonly
+                class="w-full bg-slate-50 dark:bg-[#0b0e14] text-slate-900 dark:text-[#f0f4f8] p-2.5 rounded-lg border border-slate-200 dark:border-[#20293a] font-mono text-xs focus:outline-none cursor-default"
+                />
               <span class="text-[10px] text-slate-400 dark:text-[#64748b]">Registered callback URL in Portal SSO Admin Console</span>
             </div>
           </div>
 
           <div class="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-[#20293a]">
             <span class="text-[11px] text-slate-400 dark:text-[#64748b]">
-              Sensitive X-Portal-App-Key is managed securely on eggless-server
+              Set by "Connect with Portal SSO" or the PORTAL_* environment variables. Secrets never leave the server.
             </span>
-            <button
-              (click)="savePortalConfig()"
-              class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg transition-colors text-xs"
-            >
-              {{ configSaved ? 'Saved! ✓' : 'Save SSO Settings' }}
-            </button>
+            <a routerLink="/setup" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg transition-colors text-xs">
+              Change on Setup
+            </a>
           </div>
         </div>
 
@@ -244,7 +241,7 @@ import { ApiKey } from '../../core/models/log.model';
                 <td class="py-3.5 px-4 text-right font-sans">
                   <button
                     *ngIf="key.status === 'active'"
-                    (click)="revokeKey(key.id)"
+                    (click)="revokeKey(key)"
                     class="text-slate-400 hover:text-rose-600 dark:hover:text-[#ef4444] font-medium transition-colors"
                   >
                     Revoke Key
@@ -301,6 +298,8 @@ import { ApiKey } from '../../core/models/log.model';
             </div>
           </div>
 
+          <div *ngIf="createKeyError" class="p-2.5 rounded border border-rose-200 dark:border-[#ef4444]/40 bg-rose-50 dark:bg-[#180e12] text-rose-600 dark:text-[#f87171]">{{ createKeyError }}</div>
+
           <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-[#20293a]">
             <button (click)="showCreateModal = false" class="px-3 py-1.5 bg-slate-100 dark:bg-[#161e2c] text-slate-700 dark:text-white rounded">Cancel</button>
             <button (click)="generateKey()" class="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded">Generate Ingestion Key</button>
@@ -327,8 +326,8 @@ export class SettingsComponent implements OnInit {
   showCreateModal = false;
   newKeyName = 'K8s Cluster Log Agent Key';
   createdKeyToken: string | null = null;
+  createKeyError: string | null = null;
   copied = false;
-  configSaved = false;
   testingHealth = false;
   healthResult: { ok: boolean; message: string } | null = null;
 
@@ -339,6 +338,11 @@ export class SettingsComponent implements OnInit {
   ];
 
   ngOnInit() {
+    // The server's Portal settings arrive asynchronously; show them once known.
+    this.ssoService.isConfigured().then(() => {
+      this.portalConfig = this.ssoService.getConfig();
+      this.cdr.markForCheck();
+    });
     this.route.queryParams.subscribe(params => {
       if (params['tab']) {
         // Old links to the General/Retention tabs land on the Server tab that replaced them.
@@ -352,12 +356,7 @@ export class SettingsComponent implements OnInit {
     this.healthResult = null;
     this.healthResult = await this.ssoService.checkPortalSsoHealth();
     this.testingHealth = false;
-  }
-
-  savePortalConfig() {
-    this.ssoService.updateConfig(this.portalConfig);
-    this.configSaved = true;
-    setTimeout(() => this.configSaved = false, 2500);
+    this.cdr.markForCheck();
   }
 
   generateKey() {
@@ -366,21 +365,25 @@ export class SettingsComponent implements OnInit {
         next: (keyObj) => {
           this.createdKeyToken = keyObj.token || null;
           this.showCreateModal = false;
+          this.createKeyError = null;
           this.cdr.markForCheck();
         },
-        error: () => {
-          console.error('Failed to create API key');
+        error: (err: Error) => {
+          this.createKeyError = err.message;
+          this.cdr.markForCheck();
         }
       });
     }
   }
 
-  revokeKey(id: string) {
-    this.logService.revokeApiKey(id);
+  revokeKey(key: ApiKey) {
+    if (confirm(`Revoke "${key.name}"? Anything sending logs with it will be rejected.`)) {
+      this.logService.revokeApiKey(key.id);
+    }
   }
 
   copyToken(token: string) {
-    navigator.clipboard.writeText(token);
+    navigator.clipboard?.writeText(token);
     this.copied = true;
     setTimeout(() => this.copied = false, 2000);
   }

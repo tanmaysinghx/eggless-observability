@@ -41,6 +41,16 @@ export interface SsoUser {
   };
 }
 
+/** GET /api/auth/me */
+interface ServerSessionUser {
+  id: string;
+  email: string;
+  name: string;
+  roles: string[];
+  provider: string;
+  expiresAt: string;
+}
+
 export interface PortalSsoConfig {
   baseUrl: string;
   applicationId: string;
@@ -82,6 +92,9 @@ export class SsoService {
 
   private configReady: Promise<void>;
   private configured = false;
+  private localLogin = false;
+  /** In-flight or settled check of the server session; reset on sign-in/out. */
+  private sessionCheck: Promise<boolean> | null = null;
 
   constructor() {
     this.restoreSession();
@@ -98,13 +111,43 @@ export class SsoService {
     return this.configured;
   }
 
-  public getConfig(): PortalSsoConfig {
-    return { ...this.config };
+  /** Whether the server offers "Continue as local admin" (EGGLESS_LOCAL_LOGIN=true). */
+  public async isLocalLoginEnabled(): Promise<boolean> {
+    await this.configReady;
+    return this.localLogin;
   }
 
-  public updateConfig(newConfig: Partial<PortalSsoConfig>) {
-    this.config = { ...this.config, ...newConfig };
-    localStorage.setItem('eggless_portal_config', JSON.stringify(this.config));
+  /**
+   * Resolves true when the server still accepts this browser's session cookie. The cached profile
+   * in localStorage is only for display; the server is authoritative.
+   */
+  public ensureSession(): Promise<boolean> {
+    if (!this.sessionCheck) {
+      this.sessionCheck = firstValueFrom(this.http.get<ServerSessionUser>(`${this.backendAuthUrl}/me`))
+        .then(me => {
+          const cached = this.currentUserSubject.value;
+          // Keep token details from sign-in when the cache describes the same user.
+          this.saveUserSession(cached && cached.id === me.id
+            ? { ...cached, expiresAt: me.expiresAt }
+            : this.mapSessionUser(me));
+          return true;
+        })
+        .catch(() => {
+          this.clearLocalSession();
+          return false;
+        });
+    }
+    return this.sessionCheck;
+  }
+
+  /** Called when the API answers 401: the server session expired or was signed out elsewhere. */
+  public handleSessionExpired() {
+    this.clearLocalSession();
+    this.sessionCheck = null;
+  }
+
+  public getConfig(): PortalSsoConfig {
+    return { ...this.config };
   }
 
   private loadConfig(): PortalSsoConfig {
@@ -133,6 +176,7 @@ export class SsoService {
         if (res.clientId) this.config.clientId = res.clientId;
         this.config.redirectUri = res.redirectUri || '';
         if (res.scopes) this.config.scopes = res.scopes;
+        this.localLogin = res.localLogin === true;
         localStorage.setItem('eggless_portal_config', JSON.stringify(this.config));
       }
     } catch {
@@ -140,13 +184,14 @@ export class SsoService {
     }
   }
 
+  /** Shows the cached profile immediately; {@link ensureSession} then checks it with the server. */
   private restoreSession() {
     const savedUser = localStorage.getItem('eggless_sso_user');
     if (savedUser) {
       try {
         const parsed: SsoUser = JSON.parse(savedUser);
         if (parsed.expiresAt && new Date(parsed.expiresAt) < new Date()) {
-          this.logout();
+          this.clearLocalSession();
         } else {
           this.currentUserSubject.next(parsed);
           this.isAuthenticatedSubject.next(true);
@@ -319,7 +364,7 @@ export class SsoService {
   }
 
   // ==========================================
-  // 3. UTILITIES & DEMO SESSION
+  // 3. UTILITIES & LOCAL SESSION
   // ==========================================
 
   public async checkPortalSsoHealth(): Promise<{ ok: boolean; message: string }> {
@@ -330,39 +375,24 @@ export class SsoService {
     }
   }
 
-  public loginWithDemoPortalSso(email = 'admin@portalsso.local', name = 'Alex Rivera'): SsoUser {
-    const ssoUser: SsoUser = {
-      id: 'usr_sso_demo_9921',
-      name: name,
-      email: email,
-      role: 'Staff Observability Engineer (ROLE_ADMIN)',
-      roles: ['ROLE_ADMIN', 'ROLE_OBSERVABILITY_ENG', 'ROLE_USER'],
-      tenant: 'portal.tanmaysinghx.com',
-      avatar: this.getInitials(name),
-      ssoProvider: 'Portal SSO v4.1 (Simulated OIDC PKCE)',
-      idToken: `eyJhbGciOiJSUzI1NiIsImtpZCI6InBvcnRhbC1zc28tazEifQ.${btoa(JSON.stringify({
-        sub: email,
-        iss: this.config.baseUrl,
-        aud: this.config.clientId,
-        roles: ['ROLE_ADMIN', 'ROLE_OBSERVABILITY_ENG', 'ROLE_USER'],
-        auth_time: Math.floor(Date.now() / 1000)
-      }))}.signature_valid`,
-      accessToken: 'sso_at_portal_token_demo_990182',
-      expiresAt: new Date(Date.now() + 86400000).toISOString(),
-      claims: {
-        sub: email,
-        iss: this.config.baseUrl,
-        aud: this.config.clientId,
-        roles: ['ROLE_ADMIN', 'ROLE_OBSERVABILITY_ENG', 'ROLE_USER'],
-        auth_time: Math.floor(Date.now() / 1000)
-      }
-    };
-
-    this.saveUserSession(ssoUser);
-    return ssoUser;
+  /** Signs in as the local admin; only works when the server sets EGGLESS_LOCAL_LOGIN=true. */
+  public async loginLocal(): Promise<SsoUser> {
+    try {
+      const me = await firstValueFrom(this.http.post<ServerSessionUser>(`${this.backendAuthUrl}/local`, {}));
+      const user = this.mapSessionUser(me);
+      this.saveUserSession(user);
+      return user;
+    } catch (err: any) {
+      throw new Error(err?.error?.error || err.message || 'Local sign-in failed');
+    }
   }
 
   public logout() {
+    this.http.post(`${this.backendAuthUrl}/logout`, {}).subscribe({ error: () => {} });
+    this.clearLocalSession();
+  }
+
+  private clearLocalSession() {
     localStorage.removeItem('eggless_sso_user');
     sessionStorage.removeItem('portal_auth_state');
     sessionStorage.removeItem('portal_pkce_verifier');
@@ -371,9 +401,28 @@ export class SsoService {
   }
 
   private saveUserSession(user: SsoUser) {
+    // The server set its session cookie when it accepted this sign-in.
+    this.sessionCheck = Promise.resolve(true);
     localStorage.setItem('eggless_sso_user', JSON.stringify(user));
     this.currentUserSubject.next(user);
     this.isAuthenticatedSubject.next(true);
+  }
+
+  private mapSessionUser(me: ServerSessionUser): SsoUser {
+    const roles = me.roles?.length ? me.roles : ['ROLE_USER'];
+    const name = me.name || me.email || me.id;
+    return {
+      id: me.id,
+      name,
+      email: me.email || '',
+      role: roles.includes('ROLE_ADMIN') ? 'Administrator (ROLE_ADMIN)' : 'Observability Engineer',
+      roles,
+      tenant: this.config.baseUrl ? new URL(this.config.baseUrl).hostname : 'local',
+      avatar: this.getInitials(name),
+      ssoProvider: me.provider || 'Eggless session',
+      expiresAt: me.expiresAt,
+      claims: { sub: me.id, email: me.email, roles }
+    };
   }
 
   private mapPortalUserToSsoUser(pUser: PortalUser, provider: string): SsoUser {
@@ -386,7 +435,7 @@ export class SsoService {
       email: pUser.email,
       role: roles.includes('ROLE_ADMIN') ? 'Administrator (ROLE_ADMIN)' : 'Observability Engineer',
       roles: roles,
-      tenant: 'portal.tanmaysinghx.com',
+      tenant: this.config.baseUrl ? new URL(this.config.baseUrl).hostname : 'portal',
       avatar: this.getInitials(fullName),
       ssoProvider: provider,
       expiresAt: new Date(Date.now() + 86400000).toISOString(),

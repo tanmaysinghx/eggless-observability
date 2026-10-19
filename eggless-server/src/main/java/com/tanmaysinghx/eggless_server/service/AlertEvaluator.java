@@ -60,6 +60,30 @@ public class AlertEvaluator {
         }
     }
 
+    /** Outcome of a manual rule test: the current value and whether a webhook accepted the test message. */
+    public record TestResult(double value, boolean breached, boolean webhookConfigured, Integer webhookStatus, String webhookError) {}
+
+    /** Measures the rule now and sends a test message to its webhook, if it has one. Does not change the rule. */
+    public TestResult test(AlertRuleEntity rule, Instant now) {
+        AlertCondition condition = AlertCondition.parse(rule.getCondition());
+        Duration window = Optional.ofNullable(LogQuery.parseWindow(rule.getWindow())).orElse(DEFAULT_WINDOW);
+        double value = measure(rule, condition, now.minus(window), now);
+        boolean breached = condition.breached(value);
+        String text = String.format("🥚 Eggless test message for alert \"%s\": %s is currently %.1f over %s (%s)",
+                rule.getName(), condition.metric(), value, rule.getWindow(), breached ? "would fire" : "not firing");
+        Optional<HttpRequest> request = webhookRequest(rule, text, value);
+        if (request.isEmpty()) return new TestResult(value, breached, false, null, null);
+        try {
+            int status = httpClient.send(request.get(), HttpResponse.BodyHandlers.discarding()).statusCode();
+            return new TestResult(value, breached, true, status, status >= 300 ? "Webhook returned HTTP " + status : null);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new TestResult(value, breached, true, null, "Interrupted");
+        } catch (Exception e) {
+            return new TestResult(value, breached, true, null, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+        }
+    }
+
     void evaluate(AlertRuleEntity rule, Instant now) {
         AlertCondition condition = AlertCondition.parse(rule.getCondition());
         Duration window = Optional.ofNullable(LogQuery.parseWindow(rule.getWindow())).orElse(DEFAULT_WINDOW);
@@ -109,28 +133,38 @@ public class AlertEvaluator {
     }
 
     private void notifyChannel(AlertRuleEntity rule, double value) {
-        Matcher m = URL.matcher(rule.getChannel() == null ? "" : rule.getChannel());
-        if (!m.find()) return;
         String text = String.format("🥚 Eggless alert \"%s\" triggered: %s (value %.1f over %s, application %s)",
                 rule.getName(), rule.getCondition(), value, rule.getWindow(), rule.getApplication());
         try {
-            // "text" is read by Slack/Mattermost/Google Chat, "content" by Discord.
-            String body = objectMapper.writeValueAsString(Map.of(
-                    "text", text, "content", text,
-                    "alert", Map.of("id", rule.getId(), "name", rule.getName(), "condition", rule.getCondition(),
-                            "value", value, "window", rule.getWindow(), "application", rule.getApplication())));
-            HttpRequest request = HttpRequest.newBuilder(URI.create(m.group()))
-                    .timeout(Duration.ofSeconds(10))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body))
-                    .build();
-            httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
+            Optional<HttpRequest> request = webhookRequest(rule, text, value);
+            if (request.isEmpty()) return;
+            httpClient.sendAsync(request.get(), HttpResponse.BodyHandlers.discarding())
                     .whenComplete((res, err) -> {
                         if (err != null) log.warn("Alert webhook for '{}' failed: {}", rule.getName(), err.getMessage());
                         else if (res.statusCode() >= 300) log.warn("Alert webhook for '{}' returned HTTP {}", rule.getName(), res.statusCode());
                     });
         } catch (Exception e) {
             log.warn("Alert webhook for '{}' could not be sent: {}", rule.getName(), e.getMessage());
+        }
+    }
+
+    /** The webhook POST for the rule's channel, or empty when the channel has no http(s) URL. */
+    private Optional<HttpRequest> webhookRequest(AlertRuleEntity rule, String text, double value) {
+        Matcher m = URL.matcher(rule.getChannel() == null ? "" : rule.getChannel());
+        if (!m.find()) return Optional.empty();
+        try {
+            // "text" is read by Slack/Mattermost/Google Chat, "content" by Discord.
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "text", text, "content", text,
+                    "alert", Map.of("id", rule.getId(), "name", rule.getName(), "condition", rule.getCondition(),
+                            "value", value, "window", rule.getWindow(), "application", rule.getApplication())));
+            return Optional.of(HttpRequest.newBuilder(URI.create(m.group()))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build());
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Webhook URL is not valid: " + e.getMessage(), e);
         }
     }
 }

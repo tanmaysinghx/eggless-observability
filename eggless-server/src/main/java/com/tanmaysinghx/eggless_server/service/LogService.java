@@ -112,7 +112,9 @@ public class LogService {
 
         int pageSize = Math.min(Math.max(limit, 10), 1000);
         int pageNumber = Math.max(offset / pageSize, 0);
-        Pageable pageable = PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Direction.DESC, "fullTimestamp"));
+        // id breaks timestamp ties so consecutive pages neither repeat nor skip rows.
+        Pageable pageable = PageRequest.of(pageNumber, pageSize,
+                Sort.by(Sort.Direction.DESC, "fullTimestamp").and(Sort.by(Sort.Direction.DESC, "id")));
 
         Page<LogEntryEntity> page = logRepository.findAll(query.toSpecification(), pageable);
         List<LogEntryDto> dtoList = page.getContent().stream().map(this::toDto).collect(Collectors.toList());

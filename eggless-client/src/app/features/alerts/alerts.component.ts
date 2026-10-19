@@ -1,6 +1,7 @@
-import { ChangeDetectorRef, Component, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { LogService } from '../../core/services/log.service';
 import { AlertRule } from '../../core/models/log.model';
 
@@ -18,7 +19,7 @@ import { AlertRule } from '../../core/models/log.model';
         </div>
 
         <button
-          (click)="showCreateModal = true"
+          (click)="openCreate()"
           class="px-3.5 py-2 bg-[#f59e0b] hover:bg-[#d97706] text-[#0b0e14] font-bold rounded-md transition-colors text-xs shadow-md flex items-center gap-1.5"
         >
           + Create Alert Rule
@@ -41,6 +42,11 @@ import { AlertRule } from '../../core/models/log.model';
             </tr>
           </thead>
           <tbody class="divide-y divide-[#1e2636] font-mono text-xs">
+            <tr *ngIf="(alerts$ | async)?.length === 0">
+              <td colspan="8" class="py-10 text-center text-[#64748b] font-sans">
+                No alert rules yet. Create one to get notified when errors spike.
+              </td>
+            </tr>
             <tr *ngFor="let rule of (alerts$ | async)" class="hover:bg-[#1a2332] transition-colors">
               <td class="py-3.5 px-4 font-bold text-[#f0f4f8] font-sans">
                 <div class="flex items-center gap-2">
@@ -83,10 +89,20 @@ import { AlertRule } from '../../core/models/log.model';
                 </button>
               </td>
 
-              <td class="py-3.5 px-4 text-right font-sans">
-                <button (click)="deleteRule(rule.id)" class="text-[#64748b] hover:text-[#ef4444] p-1 font-bold">
+              <td class="py-3.5 px-4 text-right font-sans whitespace-nowrap">
+                <button (click)="testRule(rule)" [disabled]="testing[rule.id]" class="text-[#64748b] hover:text-[#f59e0b] p-1 font-bold disabled:opacity-50">
+                  {{ testing[rule.id] ? 'Testing…' : 'Test' }}
+                </button>
+                <button (click)="openEdit(rule)" class="text-[#64748b] hover:text-[#f0f4f8] p-1 font-bold">
+                  Edit
+                </button>
+                <button (click)="deleteRule(rule)" class="text-[#64748b] hover:text-[#ef4444] p-1 font-bold">
                   Delete
                 </button>
+                <div *ngIf="testResults[rule.id] as r" class="mt-1 text-[10px] font-normal whitespace-normal text-left max-w-[260px] ml-auto"
+                     [ngClass]="r.error ? 'text-[#f87171]' : 'text-[#94a3b8]'">
+                  {{ r.text }}
+                </div>
               </td>
             </tr>
           </tbody>
@@ -97,8 +113,8 @@ import { AlertRule } from '../../core/models/log.model';
       <div *ngIf="showCreateModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
         <div class="bg-[#151b26] border border-[#20293a] rounded-lg w-full max-w-lg p-6 text-xs space-y-4 shadow-2xl">
           <div class="flex items-center justify-between border-b border-[#20293a] pb-3">
-            <h3 class="text-sm font-bold text-[#f0f4f8]">Create New Alert Rule</h3>
-            <button (click)="showCreateModal = false" class="text-[#64748b] hover:text-[#f0f4f8] font-bold">✕</button>
+            <h3 class="text-sm font-bold text-[#f0f4f8]">{{ editingId ? 'Edit Alert Rule' : 'Create New Alert Rule' }}</h3>
+            <button (click)="closeModal()" class="text-[#64748b] hover:text-[#f0f4f8] font-bold">✕</button>
           </div>
 
           <div class="space-y-3 font-sans">
@@ -148,16 +164,18 @@ import { AlertRule } from '../../core/models/log.model';
           <div *ngIf="createError" class="p-2.5 rounded border border-[#ef4444]/40 bg-[#180e12] text-[#f87171]">{{ createError }}</div>
 
           <div class="flex items-center justify-end gap-2 pt-3 border-t border-[#20293a]">
-            <button (click)="showCreateModal = false" class="px-3 py-1.5 bg-[#161e2c] text-white rounded">Cancel</button>
-            <button (click)="submitNewRule()" class="px-3.5 py-1.5 bg-[#f59e0b] text-[#0b0e14] font-bold rounded">Create Alert Rule</button>
+            <button (click)="closeModal()" class="px-3 py-1.5 bg-[#161e2c] text-white rounded">Cancel</button>
+            <button (click)="submitRule()" class="px-3.5 py-1.5 bg-[#f59e0b] text-[#0b0e14] font-bold rounded">{{ editingId ? 'Save Changes' : 'Create Alert Rule' }}</button>
           </div>
         </div>
       </div>
     </div>
   `
 })
-export class AlertsComponent {
+export class AlertsComponent implements OnInit {
   private logService = inject(LogService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
   // Zoneless app: state set in HTTP callbacks needs an explicit markForCheck to render.
   private cdr = inject(ChangeDetectorRef);
 
@@ -165,30 +183,105 @@ export class AlertsComponent {
   apps$ = this.logService.applications$;
   showCreateModal = false;
   createError: string | null = null;
+  /** Set while the modal edits an existing rule. */
+  editingId: string | null = null;
+  testing: Record<string, boolean> = {};
+  testResults: Record<string, { text: string; error: boolean }> = {};
 
-  newRule = {
-    name: '',
-    application: 'all',
-    query: 'level:ERROR',
-    condition: 'ERROR > 50',
-    window: '5m',
-    channel: ''
-  };
+  newRule = AlertsComponent.blankRule();
+
+  private static blankRule() {
+    return {
+      name: '',
+      application: 'all',
+      query: 'level:ERROR',
+      condition: 'ERROR > 50',
+      window: '5m',
+      channel: ''
+    };
+  }
+
+  ngOnInit() {
+    // "Create alert from this log" in the logs explorer links here with the rule prefilled.
+    const params = this.route.snapshot.queryParamMap;
+    if (params.get('new')) {
+      this.openCreate();
+      this.newRule.application = params.get('app') || 'all';
+      this.newRule.query = params.get('query') || this.newRule.query;
+      this.newRule.name = params.get('name') || '';
+      this.router.navigate([], { queryParams: {}, replaceUrl: true });
+    }
+  }
+
+  openCreate() {
+    this.editingId = null;
+    this.createError = null;
+    this.newRule = AlertsComponent.blankRule();
+    this.showCreateModal = true;
+  }
+
+  openEdit(rule: AlertRule) {
+    this.editingId = rule.id;
+    this.createError = null;
+    this.newRule = {
+      name: rule.name,
+      application: rule.application || 'all',
+      query: rule.query || '',
+      condition: rule.condition,
+      window: rule.window,
+      // "In-app only" is the server's label for an empty channel.
+      channel: rule.channel === 'In-app only' ? '' : rule.channel
+    };
+    this.showCreateModal = true;
+  }
+
+  closeModal() {
+    this.showCreateModal = false;
+    this.editingId = null;
+  }
 
   toggleRule(id: string) {
     this.logService.toggleAlertRule(id);
   }
 
-  deleteRule(id: string) {
-    this.logService.deleteAlertRule(id);
+  deleteRule(rule: AlertRule) {
+    if (confirm(`Delete alert rule "${rule.name}"?`)) {
+      this.logService.deleteAlertRule(rule.id);
+    }
   }
 
-  submitNewRule() {
+  testRule(rule: AlertRule) {
+    this.testing[rule.id] = true;
+    delete this.testResults[rule.id];
+    this.logService.testAlertRule(rule.id).subscribe({
+      next: r => {
+        const measured = `Currently ${r.value.toFixed(1)} → ${r.breached ? 'would fire' : 'not firing'}.`;
+        let text = measured + ' No webhook configured (in-app only).';
+        let error = false;
+        if (r.webhookConfigured) {
+          error = !!r.webhookError;
+          text = measured + (error ? ` Webhook failed: ${r.webhookError}` : ` Test message delivered (HTTP ${r.webhookStatus}).`);
+        }
+        this.testResults[rule.id] = { text, error };
+        this.testing[rule.id] = false;
+        this.cdr.markForCheck();
+      },
+      error: (err: Error) => {
+        this.testResults[rule.id] = { text: err.message, error: true };
+        this.testing[rule.id] = false;
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  submitRule() {
     this.createError = null;
-    this.logService.addAlertRule({ ...this.newRule, enabled: true }).subscribe({
+    const request = this.editingId
+      ? this.logService.updateAlertRule(this.editingId, this.newRule)
+      : this.logService.addAlertRule({ ...this.newRule, enabled: true });
+    request.subscribe({
       next: () => {
-        this.showCreateModal = false;
-        this.newRule = { ...this.newRule, name: '' };
+        this.closeModal();
         this.cdr.markForCheck();
       },
       error: (err: Error) => {

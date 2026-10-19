@@ -2,6 +2,7 @@ package com.tanmaysinghx.eggless_server.controller;
 
 import com.tanmaysinghx.eggless_server.dto.AlertRuleDto;
 import com.tanmaysinghx.eggless_server.dto.ApiResponse;
+import com.tanmaysinghx.eggless_server.service.AlertEvaluator;
 import com.tanmaysinghx.eggless_server.service.AlertRuleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -28,6 +29,17 @@ public class AlertController {
     public ResponseEntity<ApiResponse<AlertRuleDto>> createAlert(@RequestBody AlertRuleDto ruleDto) {
         AlertRuleDto created = alertRuleService.createRule(ruleDto);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(created));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<AlertRuleDto>> updateAlert(@PathVariable String id, @RequestBody AlertRuleDto ruleDto) {
+        return ResponseEntity.ok(ApiResponse.ok(alertRuleService.updateRule(id, ruleDto)));
+    }
+
+    /** Measures the rule now and sends a test message to its webhook. */
+    @PostMapping("/{id}/test")
+    public ResponseEntity<ApiResponse<AlertEvaluator.TestResult>> testAlert(@PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.ok(alertRuleService.testRule(id)));
     }
 
     @PutMapping("/toggle")

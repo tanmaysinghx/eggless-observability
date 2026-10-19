@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -26,6 +26,7 @@ import { SsoService } from '../../core/services/sso.service';
           <p class="text-slate-500 dark:text-[#94a3b8] text-xs">High-throughput logs & distributed systems observability</p>
         </div>
 
+        <ng-container *ngIf="portalReady()">
         <!-- Portal SSO Identity / Connectivity Badge -->
         <div class="p-3 bg-slate-50 dark:bg-[#161e2c] border border-slate-200 dark:border-[#20293a] rounded-xl flex items-center justify-between text-xs">
           <div class="flex items-center gap-2.5">
@@ -199,15 +200,23 @@ import { SsoService } from '../../core/services/sso.service';
           </button>
         </form>
 
-        <!-- Developer Demo Shortcut -->
-        <div class="pt-2 border-t border-slate-100 dark:border-[#20293a] flex items-center justify-between text-[11px]">
-          <span class="text-slate-400 dark:text-[#64748b]">Local developer?</span>
-          <button
-            (click)="onQuickDemoLogin()"
-            class="text-amber-600 dark:text-amber-400 hover:underline font-medium"
-          >
-            Sign in as Demo Admin →
-          </button>
+        </ng-container>
+
+        <!-- Local sign-in (EGGLESS_LOCAL_LOGIN=true) -->
+        <div *ngIf="localLogin()" class="pt-2 border-t border-slate-100 dark:border-[#20293a] space-y-2 text-[11px]">
+          <div *ngIf="!portalReady() && errorMessage" class="p-3 bg-rose-50 dark:bg-rose-950/25 border border-rose-200 dark:border-rose-800/40 rounded-lg text-rose-700 dark:text-rose-300">
+            {{ errorMessage }}
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400 dark:text-[#64748b]">Local sign-in is enabled on this server.</span>
+            <button
+              (click)="onLocalLogin()"
+              [disabled]="loading"
+              class="text-amber-600 dark:text-amber-400 hover:underline font-medium disabled:opacity-50"
+            >
+              Continue as local admin →
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -217,19 +226,22 @@ export class LoginComponent implements OnInit {
   private ssoService = inject(SsoService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private cdr = inject(ChangeDetectorRef);
 
   // Signals: set after awaits, and the app is zoneless.
   readonly portalConfig = signal(this.ssoService.getConfig());
   authMode: 'login' | 'register' = 'login';
 
-  email = 'alex.rivera@tanmaysinghx.com';
-  password = 'SecurePassword123!';
-  firstName = 'Alex';
-  lastName = 'Rivera';
+  email = '';
+  password = '';
+  firstName = '';
+  lastName = '';
 
   loading = false;
   errorMessage: string | null = null;
   readonly ssoOnline = signal(false);
+  readonly portalReady = signal(true);
+  readonly localLogin = signal(false);
 
   private returnUrl = '/logs';
 
@@ -240,9 +252,18 @@ export class LoginComponent implements OnInit {
       }
     });
 
+    // Already signed in (e.g. the server session survived a reload).
+    if (await this.ssoService.ensureSession()) {
+      this.router.navigateByUrl(this.returnUrl);
+      return;
+    }
+
+    const configured = await this.ssoService.isConfigured();
+    this.portalReady.set(configured);
+    this.localLogin.set(await this.ssoService.isLocalLoginEnabled());
     // Nothing to sign in with until Eggless is connected to a Portal.
-    if (!(await this.ssoService.isConfigured())) {
-      this.router.navigate(['/setup']);
+    if (!configured) {
+      if (!this.localLogin()) this.router.navigate(['/setup']);
       return;
     }
     this.portalConfig.set(this.ssoService.getConfig());
@@ -300,8 +321,17 @@ export class LoginComponent implements OnInit {
     }
   }
 
-  onQuickDemoLogin() {
-    this.ssoService.loginWithDemoPortalSso();
-    this.router.navigateByUrl(this.returnUrl);
+  async onLocalLogin() {
+    this.loading = true;
+    this.errorMessage = null;
+    try {
+      await this.ssoService.loginLocal();
+      this.router.navigateByUrl(this.returnUrl);
+    } catch (err: any) {
+      this.errorMessage = err.message;
+    } finally {
+      this.loading = false;
+      this.cdr.markForCheck();
+    }
   }
 }

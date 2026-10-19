@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
 public class AlertRuleService {
 
     private final AlertRuleRepository alertRuleRepository;
+    private final AlertEvaluator alertEvaluator;
 
     @Transactional(readOnly = true)
     public List<AlertRuleDto> getAllRules() {
@@ -29,6 +31,38 @@ public class AlertRuleService {
 
     @Transactional
     public AlertRuleDto createRule(AlertRuleDto dto) {
+        AlertRuleEntity entity = AlertRuleEntity.builder()
+                .id("alt_" + UUID.randomUUID().toString().substring(0, 8))
+                .enabled(true)
+                .status("ok")
+                .createdAt(Instant.now())
+                .build();
+        apply(dto, entity);
+        return toDto(alertRuleRepository.save(entity));
+    }
+
+    /** Replaces a rule's definition. Its state resets, so it fires again if still breached. */
+    @Transactional
+    public AlertRuleDto updateRule(String id, AlertRuleDto dto) {
+        AlertRuleEntity entity = find(id);
+        apply(dto, entity);
+        entity.setStatus(entity.isEnabled() ? "ok" : "disabled");
+        return toDto(alertRuleRepository.save(entity));
+    }
+
+    /** Measures the rule now and, if it has a webhook, sends a test message to it. Rule state is unchanged. */
+    @Transactional(readOnly = true)
+    public AlertEvaluator.TestResult testRule(String id) {
+        return alertEvaluator.test(find(id), Instant.now());
+    }
+
+    private AlertRuleEntity find(String id) {
+        return alertRuleRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Alert rule not found: " + id));
+    }
+
+    /** Validates the definition in {@code dto} and copies it onto {@code entity}. */
+    private static void apply(AlertRuleDto dto, AlertRuleEntity entity) {
         if (dto.getName() == null || dto.getName().isBlank()) {
             throw new IllegalArgumentException("Alert rule name is required");
         }
@@ -38,28 +72,17 @@ public class AlertRuleService {
         if (LogQuery.parseWindow(window) == null) {
             throw new IllegalArgumentException("Window must look like 30s, 5m, 1h or 1d (got: " + window + ")");
         }
-
-        AlertRuleEntity entity = AlertRuleEntity.builder()
-                .id("alt_" + UUID.randomUUID().toString().substring(0, 8))
-                .name(dto.getName())
-                .application(dto.getApplication() != null ? dto.getApplication() : "all")
-                .query(dto.getQuery())
-                .condition(condition)
-                .window(window)
-                .channel(dto.getChannel() != null && !dto.getChannel().isBlank() ? dto.getChannel() : "In-app only")
-                .enabled(true)
-                .status("ok")
-                .createdAt(Instant.now())
-                .build();
-
-        return toDto(alertRuleRepository.save(entity));
+        entity.setName(dto.getName().trim());
+        entity.setApplication(dto.getApplication() != null && !dto.getApplication().isBlank() ? dto.getApplication() : "all");
+        entity.setQuery(dto.getQuery());
+        entity.setCondition(condition);
+        entity.setWindow(window);
+        entity.setChannel(dto.getChannel() != null && !dto.getChannel().isBlank() ? dto.getChannel() : "In-app only");
     }
 
     @Transactional
     public AlertRuleDto toggleRule(String id) {
-        AlertRuleEntity entity = alertRuleRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Alert rule not found: " + id));
-
+        AlertRuleEntity entity = find(id);
         entity.setEnabled(!entity.isEnabled());
         entity.setStatus(entity.isEnabled() ? "ok" : "disabled");
         return toDto(alertRuleRepository.save(entity));

@@ -1,15 +1,21 @@
 package com.tanmaysinghx.eggless_server.controller;
 
+import com.tanmaysinghx.eggless_server.auth.SessionService;
 import com.tanmaysinghx.eggless_server.config.PortalSsoProperties;
 import com.tanmaysinghx.eggless_server.service.PortalSsoClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+
+import java.util.List;
 
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -26,6 +32,7 @@ class AuthControllerTests {
 
     private PortalSsoProperties properties;
     private PortalSsoClient client;
+    private SessionService sessions;
     private AuthController controller;
 
     @BeforeEach
@@ -36,7 +43,8 @@ class AuthControllerTests {
         properties.setClientSecret("test-client-secret");
         properties.setAppKey("psso_app_test-key");
         client = mock(PortalSsoClient.class);
-        controller = new AuthController(properties, client);
+        sessions = mock(SessionService.class);
+        controller = new AuthController(properties, client, sessions);
     }
 
     @Test
@@ -55,7 +63,7 @@ class AuthControllerTests {
     @Test
     void exchangeRejectsUnregisteredRedirectUri() {
         ResponseEntity<?> response = controller.exchangeCode(Map.of(
-                "code", "c", "codeVerifier", "v", "redirectUri", "http://localhost:4200/auth/callback"));
+                "code", "c", "codeVerifier", "v", "redirectUri", "http://localhost:4200/auth/callback"), new MockHttpServletRequest(), new MockHttpServletResponse());
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
         verify(client, never()).exchangeToken(any(), any(), any());
@@ -65,7 +73,8 @@ class AuthControllerTests {
     void exchangeAcceptsPopupCallback() {
         when(client.exchangeToken("c", "v", POPUP)).thenReturn(Map.of("id_token", "t"));
 
-        ResponseEntity<?> response = controller.exchangeCode(Map.of("code", "c", "codeVerifier", "v", "redirectUri", POPUP));
+        ResponseEntity<?> response = controller.exchangeCode(Map.of("code", "c", "codeVerifier", "v", "redirectUri", POPUP),
+                new MockHttpServletRequest(), new MockHttpServletResponse());
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
     }
@@ -74,15 +83,36 @@ class AuthControllerTests {
     void exchangeDefaultsToRegisteredRedirectUri() {
         when(client.exchangeToken(eq("c"), eq("v"), eq(REGISTERED))).thenReturn(Map.of("id_token", "t"));
 
-        ResponseEntity<?> response = controller.exchangeCode(Map.of("code", "c", "codeVerifier", "v"));
+        ResponseEntity<?> response = controller.exchangeCode(Map.of("code", "c", "codeVerifier", "v"),
+                new MockHttpServletRequest(), new MockHttpServletResponse());
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         verify(client).exchangeToken("c", "v", REGISTERED);
     }
 
     @Test
+    void successfulExchangeStartsASessionForTheVerifiedUser() {
+        when(client.exchangeToken("c", "v", REGISTERED)).thenReturn(Map.of("id_token", "t", "claims",
+                Map.of("sub", "usr_1", "email", "ada@example.com", "given_name", "Ada", "family_name", "Lovelace",
+                        "roles", List.of("ROLE_ADMIN"))));
+
+        controller.exchangeCode(Map.of("code", "c", "codeVerifier", "v"), new MockHttpServletRequest(), new MockHttpServletResponse());
+
+        verify(sessions).signIn(eq("usr_1"), eq("ada@example.com"), eq("Ada Lovelace"), eq(List.of("ROLE_ADMIN")),
+                anyString(), any(), any());
+    }
+
+    @Test
+    void localLoginIsRefusedUnlessEnabled() {
+        ResponseEntity<?> response = controller.localLogin(new MockHttpServletRequest(), new MockHttpServletResponse());
+
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
+        verify(sessions, never()).signIn(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void exchangeRequiresCodeAndVerifier() {
-        ResponseEntity<?> response = controller.exchangeCode(Map.of("code", "c"));
+        ResponseEntity<?> response = controller.exchangeCode(Map.of("code", "c"), new MockHttpServletRequest(), new MockHttpServletResponse());
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
     }

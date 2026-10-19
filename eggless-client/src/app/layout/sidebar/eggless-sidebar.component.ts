@@ -93,8 +93,9 @@ import { LogService } from '../../core/services/log.service';
           </a>
 
           <a
-            href="https://docs.eggless.io"
+            href="https://github.com/tanmaysinghx/eggless-observability#readme"
             target="_blank"
+            rel="noopener"
             class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-[#94a3b8] hover:text-[#f0f4f8] hover:bg-[#161e2c] transition-colors font-medium"
             [title]="isCollapsed ? 'Documentation' : ''"
           >

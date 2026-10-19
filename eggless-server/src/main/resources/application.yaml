@@ -48,6 +48,12 @@ eggless:
   # Base64 32-byte AES key for the stored Portal credentials. Generated into
   # ~/.eggless/secrets/connection.key when unset; back it up with the database.
   secret-key: ${EGGLESS_SECRET_KEY:}
+  auth:
+    # Console sign-in lasts this long (HttpOnly session cookie). The management API requires it.
+    session-hours: ${EGGLESS_SESSION_HOURS:12}
+    # Offers "Continue as local admin" without Portal SSO. Anyone who can reach the server gets
+    # full access, so enable it only on a trusted machine or network.
+    local-login: ${EGGLESS_LOCAL_LOGIN:false}
   ingest:
     # Log ingestion (POST /api/v1/logs, /logs/ingest, /logs/batch) requires an API key from
     # Settings → API Keys, sent as X-API-Key. Set to false only on a trusted network.

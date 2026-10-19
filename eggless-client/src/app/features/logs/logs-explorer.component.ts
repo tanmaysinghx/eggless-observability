@@ -1,4 +1,5 @@
-import { Component, DestroyRef, inject, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, inject, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { take } from 'rxjs/operators';
 import { CommonModule } from '@angular/common';
@@ -330,7 +331,10 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
               <span class="font-semibold text-[#f0f4f8] font-mono">{{ getEndIndex() }}</span> of
               <span class="font-semibold text-[#f0f4f8] font-mono">{{ totalFilteredLogs }}</span> logs
               <span *ngIf="totalMatching > totalFilteredLogs" class="text-[#64748b]">
-                (newest of {{ totalMatching | number }} matching — narrow the search to see older ones)
+                (newest of {{ totalMatching | number }} matching)
+                <button (click)="loadOlder()" [disabled]="loadingOlder" class="ml-1 text-[#f59e0b] hover:underline disabled:opacity-50">
+                  {{ loadingOlder ? 'Loading…' : 'Load older' }}
+                </button>
               </span>
             </div>
 
@@ -368,6 +372,8 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
       <app-log-detail-drawer
         [log]="selectedLog"
         (close)="selectedLog = null"
+        (createAlert)="createAlertFromLog($event)"
+        (showTrace)="showTrace($event)"
       ></app-log-detail-drawer>
     </div>
   `
@@ -375,6 +381,9 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
 export class LogsExplorerComponent implements OnInit {
   private logService = inject(LogService);
   private destroyRef = inject(DestroyRef);
+  private router = inject(Router);
+  // Zoneless app: state set in HTTP callbacks needs an explicit markForCheck to render.
+  private cdr = inject(ChangeDetectorRef);
 
   filteredLogs$ = this.logService.filteredLogs$;
   stats$ = this.logService.stats$;
@@ -387,6 +396,7 @@ export class LogsExplorerComponent implements OnInit {
   searchQuery = '';
   showQueryPresets = false;
   showColumnPicker = false;
+  loadingOlder = false;
   selectedLog: LogEntry | null = null;
   activeLevels: LogLevel[] = [];
 
@@ -477,6 +487,31 @@ export class LogsExplorerComponent implements OnInit {
   refreshLogs() {
     this.logService.setSearchQuery(this.searchQuery);
     this.logService.refresh();
+  }
+
+  loadOlder() {
+    this.loadingOlder = true;
+    this.logService.loadOlder().subscribe(added => {
+      this.loadingOlder = false;
+      // Jump to the first page of the newly loaded logs.
+      if (added > 0) {
+        this.currentPage = Math.floor((this.totalFilteredLogs - added) / this.pageSize) + 1;
+        this.updatePagination(this.currentLogs);
+      }
+      this.cdr.markForCheck();
+    });
+  }
+
+  createAlertFromLog(e: { app: string; query: string; name: string }) {
+    this.router.navigate(['/alerts'], { queryParams: { new: 1, app: e.app, query: e.query, name: e.name } });
+  }
+
+  /** Shows every log of a trace, across applications. */
+  showTrace(traceId: string) {
+    this.selectedLog = null;
+    this.logService.setSelectedApp('all');
+    this.logService.setFilter({ timeRange: '7d', levels: [], searchQuery: `trace:${traceId}` });
+    this.currentPage = 1;
   }
 
   copyLogMessage(log: LogEntry) {
