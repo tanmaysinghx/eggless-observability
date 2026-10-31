@@ -5,7 +5,7 @@ import { take } from 'rxjs/operators';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LogService } from '../../core/services/log.service';
-import { LogEntry, LogLevel, Environment } from '../../core/models/log.model';
+import { LogEntry, LogLevel, Environment, SavedSearch } from '../../core/models/log.model';
 import { LogDetailDrawerComponent } from './components/log-detail-drawer.component';
 import { LiveLogStreamComponent } from './components/live-log-stream.component';
 
@@ -99,7 +99,7 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
               (click)="showQueryPresets = !showQueryPresets"
               class="absolute right-2 top-1.5 px-2 py-0.5 bg-[#1a2332] hover:bg-[#25334c] text-[#94a3b8] hover:text-[#f59e0b] text-[11px] rounded border border-[#20293a] font-sans font-medium"
             >
-              Presets ▼
+              Searches ▼
             </button>
           </div>
 
@@ -117,7 +117,29 @@ import { LiveLogStreamComponent } from './components/live-log-stream.component';
         </div>
 
         <!-- Query Presets Dropdown Panel -->
-        <div *ngIf="showQueryPresets" class="absolute top-11 left-0 z-30 w-96 bg-[#151b26] border border-[#20293a] rounded-md shadow-2xl p-2 font-mono text-xs">
+        <div *ngIf="showQueryPresets" class="absolute top-11 left-0 z-30 w-96 max-w-full bg-[#151b26] border border-[#20293a] rounded-md shadow-2xl p-2 font-mono text-xs">
+          <div class="text-[10px] text-[#64748b] font-sans uppercase font-bold px-2 py-1">Saved Searches</div>
+          <ng-container *ngIf="savedSearches$ | async as saved">
+            <div *ngIf="saved.length === 0" class="px-2 py-1.5 text-[#64748b] font-sans">No saved searches yet. Save the current one below.</div>
+            <div *ngFor="let s of saved" class="group flex items-center gap-1 hover:bg-[#1c273a] rounded">
+              <button (click)="applySavedSearch(s)" class="flex-1 min-w-0 text-left px-2 py-1.5" [title]="s.query">
+                <div class="text-[#e6edf3] font-sans font-medium truncate">{{ s.name }}</div>
+                <div class="text-[10px] text-[#64748b] truncate">
+                  {{ s.query || '(any message)' }}<span *ngIf="s.levels.length"> · {{ s.levels.join(', ') }}</span> · {{ s.timeRange }}<span *ngIf="s.application !== 'all'"> · {{ s.application }}</span><span *ngIf="s.environment !== 'all'"> · {{ s.environment }}</span><span *ngIf="s.createdBy"> · by {{ s.createdBy }}</span>
+                </div>
+              </button>
+              <button (click)="deleteSavedSearch(s)" title="Delete saved search"
+                      class="px-2 py-1 text-[#64748b] hover:text-[#f87171] opacity-0 group-hover:opacity-100 focus:opacity-100">✕</button>
+            </div>
+          </ng-container>
+          <form (submit)="saveCurrentSearch($event)" class="flex items-center gap-1.5 px-2 pt-1.5 pb-2 font-sans">
+            <input [(ngModel)]="newSearchName" name="newSearchName" type="text" maxlength="120" placeholder="Name this search…"
+                   class="flex-1 min-w-0 h-7 px-2 bg-[#111622] text-[#f0f4f8] placeholder-[#64748b] rounded border border-[#20293a] focus:outline-none focus:border-[#f59e0b]" />
+            <button type="submit" [disabled]="!newSearchName.trim() || savingSearch"
+                    class="h-7 px-2.5 bg-[#f59e0b] hover:bg-[#d97706] text-[#0b0e14] font-semibold rounded disabled:opacity-50">Save</button>
+          </form>
+          <div *ngIf="saveSearchError" class="px-2 pb-2 text-[11px] text-[#f87171] font-sans">{{ saveSearchError }}</div>
+          <div class="border-t border-[#20293a] my-1"></div>
           <div class="text-[10px] text-[#64748b] font-sans uppercase font-bold px-2 py-1">Quick Search Presets</div>
           <button (click)="applyPreset('level:error')" class="w-full text-left px-2 py-1.5 hover:bg-[#1c273a] rounded text-[#f87171]">level:error — Show only ERROR level logs</button>
           <button (click)="applyPreset('service:payment-api level:warn')" class="w-full text-left px-2 py-1.5 hover:bg-[#1c273a] rounded text-[#fbbf24]">service:payment-api level:warn — Slow payment gateway warnings</button>
@@ -391,10 +413,14 @@ export class LogsExplorerComponent implements OnInit {
   selectedApp$ = this.logService.selectedApp$;
   selectedEnv$ = this.logService.selectedEnv$;
   apps$ = this.logService.applications$;
+  savedSearches$ = this.logService.savedSearches$;
 
   viewMode: 'table' | 'terminal' = 'table';
   searchQuery = '';
   showQueryPresets = false;
+  newSearchName = '';
+  savingSearch = false;
+  saveSearchError: string | null = null;
   showColumnPicker = false;
   loadingOlder = false;
   selectedLog: LogEntry | null = null;
@@ -450,6 +476,38 @@ export class LogsExplorerComponent implements OnInit {
     this.logService.setSearchQuery(preset);
     this.showQueryPresets = false;
     this.currentPage = 1;
+  }
+
+  saveCurrentSearch(e: Event) {
+    e.preventDefault();
+    const name = this.newSearchName.trim();
+    if (!name) return;
+    this.savingSearch = true;
+    this.saveSearchError = null;
+    this.logService.saveCurrentSearch(name).subscribe({
+      next: () => {
+        this.newSearchName = '';
+        this.savingSearch = false;
+        this.cdr.markForCheck();
+      },
+      error: (err: Error) => {
+        this.saveSearchError = err.message;
+        this.savingSearch = false;
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  applySavedSearch(search: SavedSearch) {
+    this.logService.applySavedSearch(search);
+    this.showQueryPresets = false;
+    this.currentPage = 1;
+  }
+
+  deleteSavedSearch(search: SavedSearch) {
+    if (confirm(`Delete saved search "${search.name}" for everyone?`)) {
+      this.logService.deleteSavedSearch(search.id);
+    }
   }
 
   toggleLevelFilter(level: LogLevel | string) {

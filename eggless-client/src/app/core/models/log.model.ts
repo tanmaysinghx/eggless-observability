@@ -29,6 +29,19 @@ export interface LogFilter {
   userId?: string;
 }
 
+/** A named Logs Explorer query, shared with everyone on this Eggless (GET /api/v1/saved-searches). */
+export interface SavedSearch {
+  id: string;
+  name: string;
+  query: string;
+  levels: LogLevel[];
+  timeRange: string;
+  application: string;
+  environment: Environment | 'all';
+  createdBy?: string;
+  createdAt?: string;
+}
+
 export interface LogStats {
   totalLogs: number;
   errorCount: number;

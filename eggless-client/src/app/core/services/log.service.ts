@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, combineLatest, interval, of, throwError, timer } from 'rxjs';
 import { map, catchError, debounceTime, distinctUntilChanged, retry, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
-import { LogEntry, LogFilter, LogStats, ApplicationInfo, ApplicationRegistration, AlertRule, AlertTestResult, ApiKey, Environment, LogLevel, MetricsSummary, NewApplication, SystemInfo } from '../models/log.model';
+import { LogEntry, LogFilter, LogStats, ApplicationInfo, ApplicationRegistration, AlertRule, AlertTestResult, ApiKey, Environment, LogLevel, MetricsSummary, NewApplication, SavedSearch, SystemInfo } from '../models/log.model';
 import { matchesQuery, parseQuery } from './log-query';
 
 @Injectable({
@@ -57,6 +57,9 @@ export class LogService {
   private alertsSubject = new BehaviorSubject<AlertRule[]>([]);
   public alerts$: Observable<AlertRule[]> = this.alertsSubject.asObservable();
 
+  private savedSearchesSubject = new BehaviorSubject<SavedSearch[]>([]);
+  public savedSearches$: Observable<SavedSearch[]> = this.savedSearchesSubject.asObservable();
+
   private apiKeysSubject = new BehaviorSubject<ApiKey[]>([]);
   public apiKeys$: Observable<ApiKey[]> = this.apiKeysSubject.asObservable();
   
@@ -98,6 +101,7 @@ export class LogService {
     this.fetchAlerts();
     this.fetchApiKeys();
     this.fetchApplications();
+    this.fetchSavedSearches();
 
     interval(15000).subscribe(() => {
       this.fetchApplications();
@@ -345,6 +349,50 @@ export class LogService {
 
   public setSelectedEnv(env: Environment | 'all') {
     this.selectedEnvSubject.next(env);
+  }
+
+  private fetchSavedSearches() {
+    this.http.get<any>(`${this.apiBase}/saved-searches`)
+      .pipe(catchError(() => of(null)))
+      .subscribe(res => {
+        if (res && res.data) {
+          this.savedSearchesSubject.next(res.data);
+        }
+      });
+  }
+
+  /** Saves the explorer's current query, level chips, time range, application and environment. */
+  public saveCurrentSearch(name: string): Observable<SavedSearch> {
+    const filter = this.filterSubject.value;
+    const body = {
+      name,
+      query: filter.searchQuery,
+      levels: filter.levels,
+      timeRange: filter.timeRange,
+      application: this.selectedAppSubject.value,
+      environment: this.selectedEnvSubject.value
+    };
+    return this.http.post<any>(`${this.apiBase}/saved-searches`, body).pipe(
+      map(res => {
+        this.fetchSavedSearches();
+        return res.data as SavedSearch;
+      }),
+      catchError(err => throwError(() => new Error(err?.error?.error || 'Failed to save search')))
+    );
+  }
+
+  /** Restores a saved search into the explorer. */
+  public applySavedSearch(search: SavedSearch) {
+    this.selectedAppSubject.next(search.application || 'all');
+    this.selectedEnvSubject.next(search.environment || 'all');
+    this.setFilter({ searchQuery: search.query || '', levels: search.levels ?? [], timeRange: search.timeRange || '1h' });
+  }
+
+  public deleteSavedSearch(id: string) {
+    this.http.delete(`${this.apiBase}/saved-searches/${encodeURIComponent(id)}`)
+      .subscribe(() => {
+        this.fetchSavedSearches();
+      });
   }
 
   /** Creates a rule; errors carry the server's validation message. */
